@@ -1,17 +1,17 @@
-# OneFetch Installation Guide
+# OneFetch 安装与使用指南
 
-## Prerequisites
+## 环境要求
 
-- Python 3.11 recommended (3.10+ supported)
+- 建议 Python 3.11（支持 3.10+）
 - `pip`
-- Optional: Playwright for JS-heavy pages
+- 可选：Playwright（用于 JS 密集页面）
 
-## Environment policy
+## 环境策略
 
-Use a virtual environment by default for both users and agents.
-Do not install dependencies into system Python for this project.
+默认使用虚拟环境（对用户与 agent 都适用）。
+不要把依赖直接安装到系统 Python。
 
-## Local setup
+## 本地初始化
 
 ```bash
 cd ~/Projects/acusp/OneFetch
@@ -21,14 +21,14 @@ pip install -U pip
 pip install -e ".[dev]"
 ```
 
-Optional browser support:
+可选浏览器能力：
 
 ```bash
 pip install -e ".[browser]"
 playwright install chromium
 ```
 
-## Verify
+## 验证
 
 ```bash
 onefetch --help
@@ -36,7 +36,7 @@ onefetch ingest --help
 PYTHONPATH=src python3 -m pytest -q
 ```
 
-Generate run reports:
+## 运行报告
 
 ```bash
 onefetch ingest "https://example.com" \
@@ -44,52 +44,56 @@ onefetch ingest "https://example.com" \
   --report-md ./reports/latest-run.md
 ```
 
-If you hit local TLS certificate issues in development environments, you can temporarily run with:
+## TLS 说明
+
+如果你在本地开发环境遇到 TLS 证书问题，可临时使用：
 
 ```bash
 ONEFETCH_INSECURE_TLS=1 onefetch ingest "https://example.com"
 ```
 
-Use this only for local debugging.
+仅用于本地调试，不建议长期使用。
 
-Default TLS behavior:
-- OneFetch uses system trust store (`truststore`) by default.
-- If needed, force `certifi` bundle:
+默认 TLS 行为：
+- OneFetch 默认使用系统信任库（`truststore`）
+- 如需强制 `certifi`：
 
 ```bash
 ONEFETCH_TLS_CERTIFI=1 onefetch ingest "https://example.com"
 ```
 
-Xiaohongshu comments:
-- Anonymous mode usually cannot access comments API.
-- To enable comment fetching, provide a logged-in cookie:
+## 小红书评论抓取
+
+说明：
+- 匿名模式通常无法稳定访问评论 API
+- 若需要评论，建议提供有效登录 Cookie
 
 ```bash
 export ONEFETCH_XHS_COOKIE='your_cookie_here'
 onefetch ingest "https://www.xiaohongshu.com/explore/..."
 ```
 
-Comment fetch mode:
+评论模式：
 
 ```bash
-# default
+# 默认（推荐）
 export ONEFETCH_XHS_COMMENT_MODE='state+api'
 
-# include Playwright DOM fallback
+# 含 DOM 兜底（成本更高）
 export ONEFETCH_XHS_COMMENT_MODE='state+api+dom'
 
-# disable comment fetch entirely
+# 关闭评论抓取
 export ONEFETCH_XHS_COMMENT_MODE='off'
 ```
 
-Comment pagination controls (for logged-in API fetching):
+分页参数（登录态评论 API）：
 
 ```bash
 export ONEFETCH_XHS_COMMENT_MAX_PAGES=3
 export ONEFETCH_XHS_COMMENT_MAX_ITEMS=50
 ```
 
-Risk-friendly API controls:
+风控友好参数：
 
 ```bash
 export ONEFETCH_XHS_API_MIN_INTERVAL_SEC=1.0
@@ -98,10 +102,10 @@ export ONEFETCH_XHS_API_BACKOFF_SEC=1.0
 export ONEFETCH_XHS_API_RISK_COOLDOWN_SEC=900
 ```
 
-When risk signals are detected (for example HTTP 461/429 or API code 300011/300012),
-OneFetch enters cooldown and skips comment API requests temporarily.
+当出现风控信号（如 HTTP 461/429，或 API code 300011/300012）时，
+OneFetch 会进入冷却期并暂时跳过评论 API。
 
-Example (logged-in comment capture):
+登录态评论抓取示例：
 
 ```bash
 export ONEFETCH_XHS_COOKIE='...'
@@ -110,31 +114,29 @@ export ONEFETCH_XHS_COMMENT_MAX_PAGES=3
 onefetch ingest "https://www.xiaohongshu.com/explore/..."
 ```
 
-Expected result in feed metadata:
+期望结果（feed metadata）：
 - `metadata.comment_fetch.source = api`
 - `metadata.comment_fetch.api.count > 0`
-- Reply comments are flattened with `↳ ` prefix when API provides nested replies.
+- 若 API 返回楼中楼回复，回复会以 `↳ ` 前缀扁平化输出
 
-For DOM fallback, install browser support first:
+若要启用 DOM 兜底，请先安装浏览器依赖：
 
 ```bash
 pip install -e ".[browser]"
 playwright install chromium
 ```
 
-## Skill installation (later phase)
+## Skill 安装（Codex）
 
 ```bash
 ln -s "$(pwd)/skills/onefetch" ~/.codex/skills/onefetch
 ```
 
-Then use natural language in Codex to trigger the skill.
+安装后，可通过自然语言触发该 skill。
 
-## Agent runbook
-
-If an agent runs commands for this project, use this order:
+## Agent 执行顺序（建议）
 
 1. `cd ~/Projects/acusp/OneFetch`
 2. `source .venv/bin/activate`
-3. `pip install -e ".[dev]"` (only when dependencies changed)
-4. Run checks/tests before reporting completion
+3. `pip install -e ".[dev]"`（仅依赖变更时执行）
+4. 运行抓取与测试后再汇报

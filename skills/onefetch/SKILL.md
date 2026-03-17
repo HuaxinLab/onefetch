@@ -6,50 +6,50 @@ argument-hint: [url-or-free-text]
 
 # OneFetch Skill
 
-Use OneFetch when the user asks to:
-- ingest/capture/archive web URLs
-- fetch Xiaohongshu links
-- save generic webpages as structured local records
+当用户提出以下需求时使用 OneFetch：
+- 采集 / 抓取 / 归档网页链接
+- 抓取小红书链接内容
+- 将通用网页保存为结构化本地记录
 
-## Preconditions
+## 前置条件
 
-Before running ingest commands, ensure:
+执行前请确认：
 
-1. Project exists at `~/Projects/acusp/OneFetch` (or `ONEFETCH_PROJECT_ROOT` points to it)
-2. Virtual environment exists at `PROJECT_ROOT/.venv`
-3. CLI is installed in that environment (`pip install -e ".[dev]"`)
+1. 项目目录存在于 `~/Projects/acusp/OneFetch`（或已设置 `ONEFETCH_PROJECT_ROOT`）
+2. 虚拟环境存在于 `PROJECT_ROOT/.venv`
+3. 该环境已安装 CLI（`pip install -e ".[dev]"`）
 
-If not ready, follow `docs/INSTALLATION.md`.
+如果不满足，请先按 `docs/INSTALLATION.md` 初始化环境。
 
-## Workflow
+## 工作流
 
-1. Extract URLs from user message.
-2. Run OneFetch CLI through wrapper script.
-3. If Xiaohongshu comments are required, use configured comment mode and (optional) login cookie.
-4. Report result status, artifact paths, and comment fetch status.
+1. 从用户输入中提取 URL。
+2. 通过 wrapper 脚本调用 OneFetch CLI。
+3. 如果用户需要小红书评论，按配置启用评论模式（可选登录 Cookie）。
+4. 向用户汇报状态、产物路径、评论抓取状态。
 
-## Commands
+## 常用命令
 
-List crawlers:
+列出可用爬虫：
 
 ```bash
 bash scripts/run_ingest.sh --list-crawlers
 ```
 
-Ingest URLs:
+抓取 URL：
 
 ```bash
 bash scripts/run_ingest.sh "https://www.xiaohongshu.com/explore/xxxxx"
 bash scripts/run_ingest.sh "https://example.com/article"
 ```
 
-Force crawler (debug only):
+强制爬虫（调试用）：
 
 ```bash
 bash scripts/run_ingest.sh --crawler xiaohongshu "URL"
 ```
 
-Generate run report files:
+生成运行报告：
 
 ```bash
 bash scripts/run_ingest.sh "URL" \
@@ -57,27 +57,27 @@ bash scripts/run_ingest.sh "URL" \
   --report-md "./reports/latest-run.md"
 ```
 
-## Xiaohongshu Comment Modes
+## 小红书评论模式
 
-Default mode:
+默认模式（推荐）：
 
 ```bash
 ONEFETCH_XHS_COMMENT_MODE='state+api' bash scripts/run_ingest.sh "URL"
 ```
 
-Include DOM fallback (higher cost):
+包含 DOM 兜底（成本更高）：
 
 ```bash
 ONEFETCH_XHS_COMMENT_MODE='state+api+dom' bash scripts/run_ingest.sh "URL"
 ```
 
-Disable comments:
+关闭评论抓取：
 
 ```bash
 ONEFETCH_XHS_COMMENT_MODE='off' bash scripts/run_ingest.sh "URL"
 ```
 
-Logged-in comment capture:
+登录态评论抓取：
 
 ```bash
 ONEFETCH_XHS_COOKIE='...' \
@@ -87,7 +87,7 @@ ONEFETCH_XHS_COMMENT_MAX_ITEMS=50 \
 bash scripts/run_ingest.sh "URL"
 ```
 
-Risk-friendly controls:
+风控友好参数：
 
 ```bash
 ONEFETCH_XHS_API_MIN_INTERVAL_SEC=1.0 \
@@ -97,19 +97,19 @@ ONEFETCH_XHS_API_RISK_COOLDOWN_SEC=900 \
 bash scripts/run_ingest.sh "URL"
 ```
 
-## Notes
+## 备注
 
-- Always run under project virtual environment (`.venv`).
-- Keep outputs under project-local `data/` directories.
-- If dependencies are missing, instruct user to follow `docs/INSTALLATION.md`.
-- For Xiaohongshu, comments may be empty without valid login cookie.
-- `comment_fetch` status is stored in feed metadata and should be reported to users.
+- 始终在项目虚拟环境（`.venv`）下执行。
+- 产物默认写入项目本地 `data/` 目录。
+- 若依赖缺失，引导用户先执行 `docs/INSTALLATION.md`。
+- 小红书无有效登录 Cookie 时，评论可能为空。
+- `comment_fetch` 状态会写入 feed metadata，应在汇报中体现。
 
-## Response Template
+## 输出模板
 
-When ingest completes, report:
+抓取完成后，建议按以下结构回复：
 
-1. Processed URL count and status summary
-2. Per-URL artifact paths (`raw`, `feed`, `note`)
-3. For Xiaohongshu: `comment_fetch.source`, `api.status/code/msg`, and comment count
-4. If report files were generated: output paths for JSON and Markdown reports
+1. URL 总处理结果（stored / duplicate / failed）
+2. 每条 URL 的产物路径（`raw` / `feed` / `note`）
+3. 小红书评论状态：`comment_fetch.source`、`api.status/code/msg`、评论条数
+4. 若生成报告：返回 JSON/Markdown 报告路径
