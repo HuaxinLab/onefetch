@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0] - 2026-03-17
+
+### Added
+- Cache-first workflow with temporary cache persistence and reuse (`--from-cache`).
+- Temp cache capacity control with automatic pruning (`--cache-max-items`, default 200).
+- `full_body`-centric present output path for downstream LLM processing.
+- Standardized `llm_outputs` schema (`summary`, `key_points`, `tags`, `extras`).
+- LLM output parser with validation, repair attempts, and safe fallback handling.
+- Explicit `llm_outputs_state` in ingest results (`missing`, `ok`, `fallback`).
+- Cache roundtrip for LLM outputs and states to support second-step operations.
+- Adapter auto-registration + priority routing, removing hardcoded adapter list in CLI.
+- New test coverage for adapter registry, LLM output parsing, and temp cache behavior.
+
+### Changed
+- Default agent strategy documented as cache-first read (`--present --from-cache`).
+- Default LLM output backfill path set to `reports/llm_output.json` (override optional).
+- Documentation structure simplified: user entry consolidated in README; script details moved to engineering docs.
+
+### Removed
+- `references/USER_GUIDE.md` and `references/USER_GUIDE.en.md` in favor of README-first user guidance.
+
 ## [0.1.0] - 2026-03-17
 
 ### Added
