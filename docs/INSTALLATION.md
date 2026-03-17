@@ -52,6 +52,15 @@ Default TLS behavior:
 ONEFETCH_TLS_CERTIFI=1 onefetch ingest "https://example.com"
 ```
 
+Xiaohongshu comments:
+- Anonymous mode usually cannot access comments API.
+- To enable comment fetching, provide a logged-in cookie:
+
+```bash
+export ONEFETCH_XHS_COOKIE='your_cookie_here'
+onefetch ingest "https://www.xiaohongshu.com/explore/..."
+```
+
 ## Skill installation (later phase)
 
 ```bash
