@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -40,14 +41,27 @@ class XiaohongshuAdapter(BaseAdapter):
         )
         canonical = normalize_url(metadata.get("canonical_url", canonical))
 
-        comments = state_comments
-        api_comments, api_status = await self._fetch_comments(metadata.get("note_id"), canonical_url=canonical)
-        if api_comments:
-            comments = api_comments
+        mode = self._comment_mode_flags()
+        comments = state_comments if mode["state"] else []
+
+        api_status = {"status": "skipped", "reason": "mode_excludes_api"}
+        if mode["api"] and not comments:
+            api_comments, api_status = await self._fetch_comments(metadata.get("note_id"), canonical_url=canonical)
+            if api_comments:
+                comments = api_comments
+
+        dom_status = {"status": "skipped", "reason": "mode_excludes_dom"}
+        if mode["dom"] and not comments:
+            dom_comments, dom_status = await self._fetch_comments_dom(final_url=final_url)
+            if dom_comments:
+                comments = dom_comments
 
         metadata["comment_fetch"] = {
+            "mode": mode["raw"],
+            "source": "state" if (comments and comments == state_comments and mode["state"]) else ("api" if api_status.get("status") == "ok" and comments else ("dom" if dom_status.get("status") == "ok" and comments else "none")),
             "state_count": len(state_comments),
             "api": api_status,
+            "dom": dom_status,
         }
 
         capture = Capture(
@@ -173,6 +187,21 @@ class XiaohongshuAdapter(BaseAdapter):
             title = title[:-6].strip()
 
         return title, author, description, published_at, metadata, comments
+
+    @staticmethod
+    def _comment_mode_flags() -> dict[str, object]:
+        raw = os.getenv("ONEFETCH_XHS_COMMENT_MODE", "state+api").strip().lower()
+        if raw == "off":
+            return {"raw": raw, "state": False, "api": False, "dom": False}
+        tokens = {part.strip() for part in raw.split("+") if part.strip()}
+        if not tokens:
+            tokens = {"state", "api"}
+        return {
+            "raw": raw,
+            "state": "state" in tokens,
+            "api": "api" in tokens,
+            "dom": "dom" in tokens,
+        }
 
     @staticmethod
     def _extract_initial_state(html_text: str) -> dict | None:
@@ -303,6 +332,143 @@ class XiaohongshuAdapter(BaseAdapter):
             "count": len(parsed),
             "has_more": bool(data.get("has_more")),
             "cursor": data.get("cursor", ""),
+        }
+
+    async def _fetch_comments_dom(self, *, final_url: str) -> tuple[list[FeedComment], dict]:
+        try:
+            from playwright.async_api import async_playwright
+        except ImportError:
+            return [], {
+                "status": "failed",
+                "reason": "playwright_missing",
+                "hint": "Install with: pip install -e '.[browser]' && playwright install chromium",
+            }
+
+        cookie_header = os.getenv("ONEFETCH_XHS_COOKIE", "").strip()
+        comment_records: list[FeedComment] = []
+        tasks: list[asyncio.Task] = []
+        seen: set[tuple[str | None, str]] = set()
+
+        async def parse_response(resp) -> None:
+            if "/api/sns/web/v2/comment/page" not in resp.url:
+                return
+            try:
+                payload = await resp.json()
+            except Exception:
+                return
+            if not isinstance(payload, dict) or not payload.get("success"):
+                return
+            data = payload.get("data") or {}
+            for item in data.get("comments") or []:
+                if not isinstance(item, dict):
+                    continue
+                text = (item.get("content") or "").strip()
+                if not text:
+                    continue
+                user = item.get("user_info") or item.get("user_info_v2") or item.get("user") or {}
+                author = user.get("nickname")
+                key = (author, text)
+                if key in seen:
+                    continue
+                seen.add(key)
+                comment_records.append(FeedComment(author=author, text=text))
+
+        async with async_playwright() as playwright:
+            browser = await playwright.chromium.launch(headless=True)
+            context = await browser.new_context(
+                user_agent="Mozilla/5.0 (compatible; OneFetch/0.1)",
+                locale="zh-CN",
+            )
+            if cookie_header:
+                cookies = []
+                for part in cookie_header.split(";"):
+                    if "=" not in part:
+                        continue
+                    name, value = part.split("=", 1)
+                    name = name.strip()
+                    value = value.strip()
+                    if not name:
+                        continue
+                    cookies.append(
+                        {
+                            "name": name,
+                            "value": value,
+                            "domain": ".xiaohongshu.com",
+                            "path": "/",
+                        }
+                    )
+                if cookies:
+                    await context.add_cookies(cookies)
+
+            page = await context.new_page()
+
+            def on_response(resp) -> None:
+                tasks.append(asyncio.create_task(parse_response(resp)))
+
+            page.on("response", on_response)
+            await page.goto(final_url, wait_until="domcontentloaded", timeout=30000)
+            # Trigger possible lazy-loaded comments area.
+            await page.evaluate(
+                """
+                () => {
+                  const clickables = Array.from(document.querySelectorAll('button, a, div, span'));
+                  for (const el of clickables) {
+                    const txt = (el.textContent || '').trim();
+                    if (!txt) continue;
+                    if (/评论|条评论/.test(txt) && txt.length <= 30) {
+                      try { el.click(); } catch (_) {}
+                    }
+                  }
+                  window.scrollTo(0, document.body.scrollHeight * 0.5);
+                }
+                """
+            )
+            await page.wait_for_timeout(5000)
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
+
+            if not comment_records:
+                # Fallback: parse visible comment-like text blocks from rendered DOM.
+                dom_payload = await page.evaluate(
+                    """
+                    () => {
+                      const selectors = [
+                        '.comments-el .content',
+                        '.comments-el .comment-content',
+                        '.comment-list .content',
+                        '[class*="comment"] [class*="content"]'
+                      ];
+                      const out = [];
+                      const seen = new Set();
+                      for (const sel of selectors) {
+                        document.querySelectorAll(sel).forEach((node) => {
+                          const text = (node.textContent || '').trim();
+                          if (!text || text.length < 2 || text.length > 600) return;
+                          if (seen.has(text)) return;
+                          seen.add(text);
+                          out.push({ author: null, text });
+                        });
+                        if (out.length >= 20) break;
+                      }
+                      return out;
+                    }
+                    """
+                )
+                if isinstance(dom_payload, list):
+                    for item in dom_payload[:20]:
+                        if not isinstance(item, dict):
+                            continue
+                        text = str(item.get("text", "")).strip()
+                        if not text:
+                            continue
+                        comment_records.append(FeedComment(author=item.get("author"), text=text))
+
+            await context.close()
+            await browser.close()
+
+        return comment_records, {
+            "status": "ok" if comment_records else "empty",
+            "count": len(comment_records),
         }
 
     @staticmethod
