@@ -2,7 +2,7 @@
 set -euo pipefail
 
 PROJECT_ROOT="${ONEFETCH_PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
-OUTPUT_DIR="${ONEFETCH_PACK_OUTPUT_DIR:-dist}"
+OUTPUT_DIR="${ONEFETCH_PACK_OUTPUT_DIR:-release}"
 ARCHIVE_NAME=""
 
 usage() {
@@ -11,7 +11,7 @@ Usage: scripts/pack.sh [--name <zip-name>] [--output <dir>]
 
 Options:
   --name <zip-name>     Archive name (e.g., onefetch.zip)
-  --output <dir>        Output directory (default: dist)
+  --output <dir>        Output directory (default: release)
   -h, --help            Show help
 USAGE
 }
