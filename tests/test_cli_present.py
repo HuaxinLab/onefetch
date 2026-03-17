@@ -1,3 +1,5 @@
+import json
+
 from onefetch import cli
 from onefetch.adapters.base import BaseAdapter
 from onefetch.models import Capture, CrawlOutput, FeedEntry
@@ -148,3 +150,50 @@ def test_ingest_present_marks_fallback_state_on_invalid_llm_output(tmp_path, cap
     assert exit_code == 0
     assert "- llm_outputs_state: fallback" in out
     assert "- llm_output_validation_error:" in out
+
+
+def test_store_flow_regenerates_fallback_llm_outputs_from_full_body(tmp_path, capsys, monkeypatch) -> None:
+    FakeAdapter.calls = 0
+    monkeypatch.setattr(cli, "create_default_adapters", lambda: [FakeAdapter()])
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    (reports_dir / "llm_output.json").write_text(
+        "summary: invalid\nkey_points: [x,y]",
+        encoding="utf-8",
+    )
+
+    first_exit = cli.main(
+        [
+            "ingest",
+            "https://example.com",
+            "--project-root",
+            str(tmp_path),
+            "--present",
+        ]
+    )
+    assert first_exit == 0
+    assert FakeAdapter.calls == 1
+    capsys.readouterr()
+
+    second_exit = cli.main(
+        [
+            "ingest",
+            "https://example.com",
+            "--project-root",
+            str(tmp_path),
+            "--from-cache",
+            "--store",
+            "--present",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert second_exit == 0
+    assert FakeAdapter.calls == 1
+    assert "- llm_outputs_state: ok" in out
+    assert "llm_output_validation_error" not in out
+
+    cache_files = sorted((tmp_path / "reports" / "cache").glob("*.json"))
+    assert cache_files
+    payload = json.loads(cache_files[-1].read_text(encoding="utf-8"))
+    assert payload["llm_outputs_state"] == "ok"
+    assert payload["llm_outputs"]["extras"]["regenerated_from_full_body"] is True

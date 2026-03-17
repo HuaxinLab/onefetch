@@ -162,6 +162,57 @@ def _llm_outputs_state(parsed_output) -> str:
     return "missing"
 
 
+def _regenerate_llm_outputs_from_full_body(result) -> None:
+    body = (result.body_full or result.body_excerpt or result.body_preview or "").strip()
+    if not body:
+        return
+    summary = _preview_text(body, limit=360)
+    key_points = _build_key_points(body, max_points=5)
+    tags: list[str] = []
+    crawler_hint = (result.crawler_id or "").strip()
+    if crawler_hint:
+        tags.append(crawler_hint)
+    title_hint = (result.title or "").strip()
+    if title_hint:
+        tags.append("article")
+    dedup_tags: list[str] = []
+    seen: set[str] = set()
+    for tag in tags:
+        if tag in seen:
+            continue
+        seen.add(tag)
+        dedup_tags.append(tag)
+    result.llm_outputs.summary = summary
+    result.llm_outputs.key_points = key_points
+    result.llm_outputs.tags = dedup_tags
+    previous_extras = {
+        key: value
+        for key, value in result.llm_outputs.extras.items()
+        if key not in {"validation_error", "raw_output", "repaired_from_non_strict_json"}
+    }
+    result.llm_outputs.extras = {
+        **previous_extras,
+        "regenerated_from_full_body": True,
+        "previous_state": result.llm_outputs_state,
+    }
+    result.llm_outputs_state = "ok"
+
+
+def _ensure_store_ready_llm_outputs(report) -> None:
+    for result in report.results:
+        if result.status == "failed":
+            continue
+        if result.llm_outputs_state in {"fallback", "missing"}:
+            _regenerate_llm_outputs_from_full_body(result)
+
+
+def _preview_text(text: str, limit: int = 280) -> str:
+    normalized = " ".join((text or "").split())
+    if len(normalized) <= limit:
+        return normalized
+    return normalized[: limit - 1] + "…"
+
+
 def _build_key_points(text: str, max_points: int = 3) -> list[str]:
     cleaned = " ".join((text or "").split())
     if not cleaned:
@@ -268,11 +319,12 @@ async def run_ingest(args: argparse.Namespace) -> int:
             result.llm_outputs = parsed_output
             result.llm_outputs_state = parsed_state
 
+    if args.store:
+        _ensure_store_ready_llm_outputs(report)
+
     if cache_service is not None:
         for result in report.results:
             if result.status == "failed":
-                continue
-            if result.cache_path == "<cache-hit>":
                 continue
             result.cache_path = cache_service.save_result(result)
 
