@@ -81,6 +81,18 @@ export ONEFETCH_XHS_COMMENT_MAX_PAGES=3
 export ONEFETCH_XHS_COMMENT_MAX_ITEMS=50
 ```
 
+Risk-friendly API controls:
+
+```bash
+export ONEFETCH_XHS_API_MIN_INTERVAL_SEC=1.0
+export ONEFETCH_XHS_API_MAX_RETRIES=2
+export ONEFETCH_XHS_API_BACKOFF_SEC=1.0
+export ONEFETCH_XHS_API_RISK_COOLDOWN_SEC=900
+```
+
+When risk signals are detected (for example HTTP 461/429 or API code 300011/300012),
+OneFetch enters cooldown and skips comment API requests temporarily.
+
 Example (logged-in comment capture):
 
 ```bash
