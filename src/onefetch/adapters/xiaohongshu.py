@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
@@ -33,15 +34,21 @@ class XiaohongshuAdapter(BaseAdapter):
         canonical = normalize_url(final_url)
         body_text = response.text
 
-        title, author, content, published_at, metadata, initial_comments = self._extract_from_html(body_text, final_url)
+        state = self._extract_initial_state(body_text)
+        title, author, content, published_at, metadata, state_comments = self._extract_from_html_and_state(
+            body_text, final_url, state
+        )
         canonical = normalize_url(metadata.get("canonical_url", canonical))
-        comments = initial_comments
 
-        note_id = metadata.get("note_id")
-        fetched_comments, comment_fetch = await self._fetch_comments(note_id, canonical_url=canonical)
-        if fetched_comments:
-            comments = fetched_comments
-        metadata["comment_fetch"] = comment_fetch
+        comments = state_comments
+        api_comments, api_status = await self._fetch_comments(metadata.get("note_id"), canonical_url=canonical)
+        if api_comments:
+            comments = api_comments
+
+        metadata["comment_fetch"] = {
+            "state_count": len(state_comments),
+            "api": api_status,
+        }
 
         capture = Capture(
             source_url=url,
@@ -64,10 +71,14 @@ class XiaohongshuAdapter(BaseAdapter):
         )
         return CrawlOutput(capture=capture, feed=feed)
 
-    def _extract_from_html(
-        self, html_text: str, final_url: str
+    def _extract_from_html_and_state(
+        self,
+        html_text: str,
+        final_url: str,
+        state: dict | None,
     ) -> tuple[str | None, str | None, str | None, datetime | None, dict, list[FeedComment]]:
         tree = html.fromstring(html_text)
+
         og_url = self._first(
             tree,
             [
@@ -100,36 +111,38 @@ class XiaohongshuAdapter(BaseAdapter):
         )
         published_raw = self._first(tree, ["//meta[@property='article:published_time']/@content", "//time/@datetime"])
         published_at = self._parse_datetime(published_raw)
-        metadata = {
+
+        metadata: dict = {
             "platform": "xiaohongshu",
             "final_url": final_url,
         }
-        comments: list[FeedComment] = []
         if og_url:
             metadata["canonical_url"] = og_url
 
-        # Prefer noteDetailMap payload from initial state when present.
-        note_data = self._extract_note_data_from_initial_state(html_text, final_url)
-        if note_data:
-            note_title = note_data.get("title")
-            note_desc = note_data.get("desc")
-            user = note_data.get("user") or {}
-            interact = note_data.get("interactInfo") or {}
-            note_time = note_data.get("time")
+        comments: list[FeedComment] = []
 
-            if isinstance(note_title, str) and note_title.strip():
-                title = note_title.strip()
-            if isinstance(note_desc, str) and note_desc.strip():
-                description = note_desc.strip()
-            if isinstance(user.get("nickname"), str) and user.get("nickname").strip():
+        note_detail = self._pick_note_detail(state, final_url)
+        if note_detail:
+            note = note_detail.get("note") or {}
+            if isinstance(note.get("title"), str) and note["title"].strip():
+                title = note["title"].strip()
+            body = self._build_note_body(note)
+            if body:
+                description = body
+
+            user = note.get("user") or {}
+            if isinstance(user.get("nickname"), str) and user["nickname"].strip():
                 author = user["nickname"].strip()
+
+            note_time = note.get("time") or note.get("lastUpdateTime")
             if published_at is None and isinstance(note_time, (int, float)):
                 published_at = datetime.fromtimestamp(note_time / 1000, tz=timezone.utc)
 
-            comments = self._parse_comments_from_note_payload(note_data)
+            interact = note.get("interactInfo") or {}
             metadata.update(
                 {
-                    "note_id": note_data.get("noteId"),
+                    "content_type": "note",
+                    "note_id": note.get("noteId") or self._extract_note_id(final_url),
                     "interact_info": {
                         "liked_count": interact.get("likedCount"),
                         "comment_count": interact.get("commentCount"),
@@ -138,39 +151,159 @@ class XiaohongshuAdapter(BaseAdapter):
                     },
                 }
             )
+            comments = self._parse_comments_from_note_detail(note_detail)
+        else:
+            profile = (((state or {}).get("user") or {}).get("userPageData")) or {}
+            basic = profile.get("basicInfo") or {}
+            interactions = profile.get("interactions") or []
+            if isinstance(basic.get("nickname"), str) and basic["nickname"].strip():
+                title = basic["nickname"].strip()
+                author = basic["nickname"].strip()
+            profile_lines: list[str] = []
+            if isinstance(basic.get("desc"), str) and basic["desc"].strip():
+                profile_lines.append(basic["desc"].strip())
+            for item in interactions:
+                if isinstance(item, dict) and item.get("name") and item.get("count") is not None:
+                    profile_lines.append(f"{item['name']}: {item['count']}")
+            if profile_lines:
+                description = "\n".join(profile_lines)
+            metadata["content_type"] = "profile"
 
-        # Trim product suffix for readability.
         if title and title.endswith(" - 小红书"):
             title = title[:-6].strip()
+
         return title, author, description, published_at, metadata, comments
 
-    def _extract_note_data_from_initial_state(self, html_text: str, url: str) -> dict | None:
-        note_id = self._extract_note_id(url)
-        if not note_id:
+    @staticmethod
+    def _extract_initial_state(html_text: str) -> dict | None:
+        marker = "window.__INITIAL_STATE__="
+        start = html_text.find(marker)
+        if start < 0:
             return None
-        marker = f"\"noteDetailMap\":{{\"{note_id}\":"
-        idx = html_text.find(marker)
-        if idx < 0:
+        idx = start + len(marker)
+        while idx < len(html_text) and html_text[idx] != "{":
+            idx += 1
+        raw = XiaohongshuAdapter._extract_balanced_object(html_text, idx)
+        if not raw:
             return None
-        start = idx + len(marker)
-        note_object = self._extract_balanced_object(html_text, start)
-        if not note_object:
-            return None
+        normalized = re.sub(r":\s*undefined(?=[,}])", ": null", raw)
+        normalized = re.sub(r"\bundefined\b", "null", normalized)
         try:
-            payload = json.loads(note_object)
+            return json.loads(normalized)
         except json.JSONDecodeError:
             return None
-        note = payload.get("note")
-        if isinstance(note, dict):
-            return note
+
+    def _pick_note_detail(self, state: dict | None, final_url: str) -> dict | None:
+        note_map = (((state or {}).get("note") or {}).get("noteDetailMap")) or {}
+        if not isinstance(note_map, dict) or not note_map:
+            return None
+
+        note_id = self._extract_note_id(final_url)
+        if note_id and isinstance(note_map.get(note_id), dict):
+            return note_map[note_id]
+
+        # Fallback for cases where URL note id differs from hydrated state key.
+        first_key = next(iter(note_map), None)
+        if first_key and isinstance(note_map.get(first_key), dict):
+            return note_map[first_key]
         return None
 
     @staticmethod
     def _extract_note_id(url: str) -> str:
-        path_parts = [part for part in urlparse(url).path.split("/") if part]
-        if len(path_parts) >= 2 and path_parts[0] == "explore":
-            return path_parts[1]
+        parts = [part for part in urlparse(url).path.split("/") if part]
+        if len(parts) >= 2 and parts[0] in {"explore", "discovery"}:
+            # /explore/<note_id>
+            if parts[0] == "explore":
+                return parts[1]
+            # /discovery/item/<note_id>
+            if len(parts) >= 3 and parts[1] == "item":
+                return parts[2]
         return ""
+
+    @staticmethod
+    def _build_note_body(note: dict) -> str:
+        title = (note.get("title") or "").strip()
+        desc = (note.get("desc") or "").strip()
+        parts: list[str] = []
+        if title:
+            parts.append(title)
+        if desc:
+            parts.append(desc)
+
+        tags = note.get("tagList") or []
+        tag_names = [item.get("name", "").strip() for item in tags if isinstance(item, dict) and item.get("name")]
+        if tag_names:
+            parts.append("Tags: " + ", ".join(tag_names))
+        return "\n\n".join(part for part in parts if part)
+
+    @staticmethod
+    def _parse_comments_from_note_detail(note_detail: dict) -> list[FeedComment]:
+        comments: list[FeedComment] = []
+        comments_blob = (note_detail.get("comments") or {}).get("list") or []
+        for item in comments_blob:
+            if not isinstance(item, dict):
+                continue
+            text = (item.get("content") or item.get("text") or "").strip()
+            if not text:
+                continue
+            user = item.get("user_info") or item.get("user_info_v2") or item.get("user") or {}
+            author = user.get("nickname")
+            comments.append(FeedComment(author=author, text=text))
+        return comments
+
+    async def _fetch_comments(self, note_id: str | None, *, canonical_url: str) -> tuple[list[FeedComment], dict]:
+        if not note_id:
+            return [], {"status": "skipped", "reason": "missing_note_id"}
+
+        cookie = os.getenv("ONEFETCH_XHS_COOKIE", "").strip()
+        if not cookie:
+            return [], {"status": "skipped", "reason": "missing_cookie"}
+
+        url = (
+            "https://edith.xiaohongshu.com/api/sns/web/v2/comment/page"
+            f"?note_id={note_id}&cursor=&top_comment_id=&image_formats=jpg,webp,avif"
+        )
+        headers = {
+            "User-Agent": "Mozilla/5.0 (compatible; OneFetch/0.1)",
+            "Accept": "application/json, text/plain, */*",
+            "Referer": canonical_url,
+            "Cookie": cookie,
+        }
+
+        try:
+            async with create_async_client(timeout=20, follow_redirects=True, headers=headers) as client:
+                response = await client.get(url)
+            if response.status_code != 200:
+                return [], {"status": "failed", "reason": "http_error", "http_status": response.status_code}
+            payload = response.json()
+        except Exception as exc:
+            return [], {"status": "failed", "reason": "request_error", "error": str(exc)}
+
+        if not payload.get("success"):
+            return [], {
+                "status": "failed",
+                "reason": "api_error",
+                "code": payload.get("code"),
+                "msg": payload.get("msg", ""),
+            }
+
+        parsed: list[FeedComment] = []
+        data = payload.get("data") or {}
+        for item in data.get("comments") or []:
+            if not isinstance(item, dict):
+                continue
+            text = (item.get("content") or "").strip()
+            if not text:
+                continue
+            user = item.get("user_info") or item.get("user_info_v2") or item.get("user") or {}
+            parsed.append(FeedComment(author=user.get("nickname"), text=text))
+
+        return parsed, {
+            "status": "ok",
+            "count": len(parsed),
+            "has_more": bool(data.get("has_more")),
+            "cursor": data.get("cursor", ""),
+        }
 
     @staticmethod
     def _extract_balanced_object(text: str, start: int) -> str | None:
@@ -196,74 +329,6 @@ class XiaohongshuAdapter(BaseAdapter):
                 if depth == 0:
                     return text[start : idx + 1]
         return None
-
-    @staticmethod
-    def _parse_comments_from_note_payload(note_payload: dict) -> list[FeedComment]:
-        comments: list[FeedComment] = []
-        # Currently the SSR payload often contains empty comment list, but parse it when available.
-        for item in (note_payload.get("comments") or {}).get("list") or []:
-            if not isinstance(item, dict):
-                continue
-            text = (item.get("content") or "").strip()
-            if not text:
-                continue
-            user = item.get("user_info") or item.get("user") or {}
-            author = user.get("nickname")
-            comments.append(FeedComment(author=author, text=text))
-        return comments
-
-    async def _fetch_comments(self, note_id: str | None, *, canonical_url: str) -> tuple[list[FeedComment], dict]:
-        if not note_id:
-            return [], {"status": "skipped", "reason": "missing_note_id"}
-        cookie = os.getenv("ONEFETCH_XHS_COOKIE", "").strip()
-        if not cookie:
-            return [], {"status": "skipped", "reason": "missing_cookie"}
-
-        url = (
-            "https://edith.xiaohongshu.com/api/sns/web/v2/comment/page"
-            f"?note_id={note_id}&cursor=&top_comment_id=&image_formats=jpg,webp,avif"
-        )
-        headers = {
-            "User-Agent": "Mozilla/5.0 (compatible; OneFetch/0.1)",
-            "Accept": "application/json, text/plain, */*",
-            "Referer": canonical_url,
-            "Cookie": cookie,
-        }
-        try:
-            async with create_async_client(timeout=20, follow_redirects=True, headers=headers) as client:
-                response = await client.get(url)
-            if response.status_code != 200:
-                return [], {"status": "failed", "reason": "http_error", "http_status": response.status_code}
-            payload = response.json()
-        except Exception as exc:
-            return [], {"status": "failed", "reason": "request_error", "error": str(exc)}
-
-        if not payload.get("success"):
-            return [], {
-                "status": "failed",
-                "reason": "api_error",
-                "code": payload.get("code"),
-                "msg": payload.get("msg", ""),
-            }
-
-        data = payload.get("data") or {}
-        parsed: list[FeedComment] = []
-        for item in data.get("comments") or []:
-            if not isinstance(item, dict):
-                continue
-            text = (item.get("content") or "").strip()
-            if not text:
-                continue
-            user = item.get("user_info") or item.get("user_info_v2") or item.get("user") or {}
-            author = user.get("nickname")
-            parsed.append(FeedComment(author=author, text=text))
-
-        return parsed, {
-            "status": "ok",
-            "count": len(parsed),
-            "has_more": bool(data.get("has_more")),
-            "cursor": data.get("cursor", ""),
-        }
 
     @staticmethod
     def _first(tree: html.HtmlElement, xpaths: list[str]) -> str | None:
