@@ -20,7 +20,7 @@ def test_extract_note_data_from_initial_state() -> None:
     </html>
     """
 
-    title, author, body, published_at, metadata = adapter._extract_from_html(html_text, url)
+    title, author, body, published_at, metadata, comments = adapter._extract_from_html(html_text, url)
 
     assert title == "Parsed Title"
     assert author == "小七麦"
@@ -29,3 +29,4 @@ def test_extract_note_data_from_initial_state() -> None:
     assert metadata["canonical_url"] == "https://www.xiaohongshu.com/explore/68075b1d000000001b03c4f0"
     assert metadata["note_id"] == "68075b1d000000001b03c4f0"
     assert metadata["interact_info"]["liked_count"] == "102"
+    assert comments == []

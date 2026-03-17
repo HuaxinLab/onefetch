@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
@@ -8,7 +9,7 @@ from lxml import html
 
 from onefetch.adapters.base import BaseAdapter
 from onefetch.http import create_async_client
-from onefetch.models import Capture, CrawlOutput, FeedEntry
+from onefetch.models import Capture, CrawlOutput, FeedComment, FeedEntry
 from onefetch.router import normalize_url
 
 
@@ -32,8 +33,15 @@ class XiaohongshuAdapter(BaseAdapter):
         canonical = normalize_url(final_url)
         body_text = response.text
 
-        title, author, content, published_at, metadata = self._extract_from_html(body_text, final_url)
+        title, author, content, published_at, metadata, initial_comments = self._extract_from_html(body_text, final_url)
         canonical = normalize_url(metadata.get("canonical_url", canonical))
+        comments = initial_comments
+
+        note_id = metadata.get("note_id")
+        fetched_comments, comment_fetch = await self._fetch_comments(note_id, canonical_url=canonical)
+        if fetched_comments:
+            comments = fetched_comments
+        metadata["comment_fetch"] = comment_fetch
 
         capture = Capture(
             source_url=url,
@@ -51,13 +59,14 @@ class XiaohongshuAdapter(BaseAdapter):
             author=author,
             published_at=published_at,
             body=content or "",
+            comments=comments,
             metadata=metadata,
         )
         return CrawlOutput(capture=capture, feed=feed)
 
     def _extract_from_html(
         self, html_text: str, final_url: str
-    ) -> tuple[str | None, str | None, str | None, datetime | None, dict]:
+    ) -> tuple[str | None, str | None, str | None, datetime | None, dict, list[FeedComment]]:
         tree = html.fromstring(html_text)
         og_url = self._first(
             tree,
@@ -95,6 +104,7 @@ class XiaohongshuAdapter(BaseAdapter):
             "platform": "xiaohongshu",
             "final_url": final_url,
         }
+        comments: list[FeedComment] = []
         if og_url:
             metadata["canonical_url"] = og_url
 
@@ -116,6 +126,7 @@ class XiaohongshuAdapter(BaseAdapter):
             if published_at is None and isinstance(note_time, (int, float)):
                 published_at = datetime.fromtimestamp(note_time / 1000, tz=timezone.utc)
 
+            comments = self._parse_comments_from_note_payload(note_data)
             metadata.update(
                 {
                     "note_id": note_data.get("noteId"),
@@ -131,7 +142,7 @@ class XiaohongshuAdapter(BaseAdapter):
         # Trim product suffix for readability.
         if title and title.endswith(" - 小红书"):
             title = title[:-6].strip()
-        return title, author, description, published_at, metadata
+        return title, author, description, published_at, metadata, comments
 
     def _extract_note_data_from_initial_state(self, html_text: str, url: str) -> dict | None:
         note_id = self._extract_note_id(url)
@@ -185,6 +196,74 @@ class XiaohongshuAdapter(BaseAdapter):
                 if depth == 0:
                     return text[start : idx + 1]
         return None
+
+    @staticmethod
+    def _parse_comments_from_note_payload(note_payload: dict) -> list[FeedComment]:
+        comments: list[FeedComment] = []
+        # Currently the SSR payload often contains empty comment list, but parse it when available.
+        for item in (note_payload.get("comments") or {}).get("list") or []:
+            if not isinstance(item, dict):
+                continue
+            text = (item.get("content") or "").strip()
+            if not text:
+                continue
+            user = item.get("user_info") or item.get("user") or {}
+            author = user.get("nickname")
+            comments.append(FeedComment(author=author, text=text))
+        return comments
+
+    async def _fetch_comments(self, note_id: str | None, *, canonical_url: str) -> tuple[list[FeedComment], dict]:
+        if not note_id:
+            return [], {"status": "skipped", "reason": "missing_note_id"}
+        cookie = os.getenv("ONEFETCH_XHS_COOKIE", "").strip()
+        if not cookie:
+            return [], {"status": "skipped", "reason": "missing_cookie"}
+
+        url = (
+            "https://edith.xiaohongshu.com/api/sns/web/v2/comment/page"
+            f"?note_id={note_id}&cursor=&top_comment_id=&image_formats=jpg,webp,avif"
+        )
+        headers = {
+            "User-Agent": "Mozilla/5.0 (compatible; OneFetch/0.1)",
+            "Accept": "application/json, text/plain, */*",
+            "Referer": canonical_url,
+            "Cookie": cookie,
+        }
+        try:
+            async with create_async_client(timeout=20, follow_redirects=True, headers=headers) as client:
+                response = await client.get(url)
+            if response.status_code != 200:
+                return [], {"status": "failed", "reason": "http_error", "http_status": response.status_code}
+            payload = response.json()
+        except Exception as exc:
+            return [], {"status": "failed", "reason": "request_error", "error": str(exc)}
+
+        if not payload.get("success"):
+            return [], {
+                "status": "failed",
+                "reason": "api_error",
+                "code": payload.get("code"),
+                "msg": payload.get("msg", ""),
+            }
+
+        data = payload.get("data") or {}
+        parsed: list[FeedComment] = []
+        for item in data.get("comments") or []:
+            if not isinstance(item, dict):
+                continue
+            text = (item.get("content") or "").strip()
+            if not text:
+                continue
+            user = item.get("user_info") or item.get("user_info_v2") or item.get("user") or {}
+            author = user.get("nickname")
+            parsed.append(FeedComment(author=author, text=text))
+
+        return parsed, {
+            "status": "ok",
+            "count": len(parsed),
+            "has_more": bool(data.get("has_more")),
+            "cursor": data.get("cursor", ""),
+        }
 
     @staticmethod
     def _first(tree: html.HtmlElement, xpaths: list[str]) -> str | None:
