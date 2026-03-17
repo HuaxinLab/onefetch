@@ -39,6 +39,7 @@ ONEFETCH_GENERIC_RENDER_MODE=browser bash scripts/run_ingest.sh "URL"
 Xiaohongshu comments:
 
 ```bash
-ONEFETCH_XHS_COOKIE='...' ONEFETCH_XHS_COMMENT_MODE='state+api' \
+bash scripts/setup_xhs_cookie.sh
+ONEFETCH_XHS_COMMENT_MODE='state+api' \
   bash scripts/run_ingest.sh "https://www.xiaohongshu.com/explore/..."
 ```
