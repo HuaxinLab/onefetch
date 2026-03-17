@@ -30,11 +30,8 @@ dev = [
 [project.scripts]
 onefetch = "onefetch.cli:main"
 
-[tool.setuptools]
-package-dir = {"" = "src"}
-
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["."]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

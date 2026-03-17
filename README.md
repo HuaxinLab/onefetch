@@ -1,63 +1,52 @@
 # OneFetch
 
-OneFetch is a focused cross-platform content ingestion tool.
+OneFetch 是一个“Skill 外壳 + Python 内核”的网页读取工具，支持：
+- 小红书
+- 微信公众号
+- 通用 HTML（含 JS 渲染）
 
-Current phase goal:
-- Support `xiaohongshu` and `generic_html`
-- Keep architecture simple and extensible
-- Provide one CLI entrypoint and one Skill-facing workflow
+默认是读取展示（fetch-only），只有显式 `--store` 才写入本地。
 
-## Project status
+English: `references/README.en.md`
 
-Scaffold and baseline docs are ready.
-Core CLI, router, storage, and adapter skeletons are implemented.
+## 目录结构（Skill 规范）
 
-## Documentation index
+- `SKILL.md`
+- `scripts/`
+- `references/`
+- `onefetch/`
+- `tests/`
 
-- `docs/PLAN.md`
-- `docs/REQUIREMENTS.md`
-- `docs/ARCHITECTURE.md`
-- `docs/INSTALLATION.md`
-- `docs/IMPLEMENTATION_GUIDE.md`
-
-## Scope of v0.1
-
-- URL routing
-- Two adapters (`xiaohongshu`, `generic_html`)
-- Unified output schema
-- Unified data storage (`data/raw`, `data/feed`, `data/notes`)
-- CLI command: `onefetch ingest <url>`
-
-## Module responsibilities
-
-- `cli.py`: Command entrypoint. Parses args and prints ingest results.
-- `router.py`: URL routing. Chooses adapter by URL pattern or forced crawler id.
-- `pipeline.py`: End-to-end orchestration. Route -> crawl -> dedupe -> store -> report.
-- `storage.py`: Artifact persistence and dedup catalog management.
-- `adapters/xiaohongshu.py`: Xiaohongshu-specific extraction and mapping.
-- `adapters/generic_html.py`: Fallback extractor for generic webpages.
-- `tests/`: Regression protection for routing, storage, and pipeline behavior.
-
-## Quick start
+## 给非开发用户的最短用法
 
 ```bash
-cd ~/Projects/acusp/OneFetch
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -U pip
-pip install -e ".[dev]"
+cd <project-root>
+bash scripts/bootstrap.sh
+bash scripts/doctor.sh
+bash scripts/run_ingest.sh --present "https://example.com"
 ```
 
-Optional browser support:
+需要保存时：
 
 ```bash
-pip install -e ".[browser]"
-playwright install chromium
+bash scripts/run_ingest.sh --store "https://example.com"
 ```
 
-Verify:
+## 常用命令
 
 ```bash
-onefetch --help
-onefetch ingest --help
+bash scripts/run_ingest.sh --list-crawlers
+bash scripts/run_ingest.sh --present "https://example.com"
+bash scripts/run_ingest.sh "https://example.com" --report-md "./reports/latest-run.md"
+bash scripts/clean.sh
+bash scripts/pack.sh --clean-before
+bash scripts/pack.sh --name onefetch.zip --output release
 ```
+
+## 文档
+
+- `references/INSTALLATION.md`
+- `references/ARCHITECTURE.md`
+- `references/IMPLEMENTATION_GUIDE.md`
+- `references/REQUIREMENTS.md`
+- `references/PLAN.md`

@@ -62,17 +62,26 @@ class IngestResult(BaseModel):
     source_url: str
     canonical_url: str
     crawler_id: str
-    status: Literal["stored", "duplicate", "failed"]
+    status: Literal["fetched", "stored", "duplicate", "failed"]
     title: str = ""
     error: str = ""
+    error_code: str = ""
+    error_type: str = ""
+    retryable: bool = False
     raw_path: str = ""
     feed_path: str = ""
     note_path: str = ""
+    comment_count: int = 0
+    comment_source: str = "none"
+    body_preview: str = ""
+    body_excerpt: str = ""
+    risk_controlled: bool = False
 
 
 class BatchIngestReport(BaseModel):
     requested_urls: list[str]
     results: list[IngestResult] = Field(default_factory=list)
+    fetched_count: int = 0
     stored_count: int = 0
     duplicate_count: int = 0
     failed_count: int = 0
