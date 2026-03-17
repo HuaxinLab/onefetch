@@ -9,9 +9,11 @@
 - 三平台 adapter（`xiaohongshu` / `wechat` / `generic_html`）
 - adapter 自动注册与优先级路由（专用 adapter 优先，`generic_html` 兜底）
 - 默认 cache-first 读取（`--present --from-cache`）
+- 支持 `--refresh` 强制实时抓取（跳过缓存读取）
 - 显式 `--store` 持久化
 - 临时缓存上限控制（`--cache-max-items`）
 - 模型输出默认回填（`reports/llm_output.json`，可用 `--llm-output-file` 覆盖）
+- `--store` 且结构化结果失效时，优先通过 `ONEFETCH_LLM_REGEN_CMD` 执行真实 LLM 重算，失败再规则兜底
 - cookie 一次配置与自动加载
 - 打包与清理脚本
 

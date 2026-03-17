@@ -9,9 +9,11 @@ Completed:
 - three adapters (`xiaohongshu` / `wechat` / `generic_html`)
 - adapter auto-registration with priority routing (specialized adapters first, `generic_html` as fallback)
 - default cache-first read flow (`--present --from-cache`)
+- `--refresh` support for forced live crawl (bypass cache read)
 - explicit `--store` persistence
 - temp cache size control (`--cache-max-items`)
 - default LLM output backfill (`reports/llm_output.json`, overridable via `--llm-output-file`)
+- in `--store` flow, invalid structured output is regenerated via real LLM through `ONEFETCH_LLM_REGEN_CMD` first, then heuristic fallback
 - one-time cookie setup and auto-load
 - packing and cleanup scripts
 

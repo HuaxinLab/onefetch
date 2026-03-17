@@ -3,7 +3,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import re
+import shlex
 import time
 from collections import Counter
 from datetime import datetime, timezone
@@ -68,6 +70,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--from-cache",
         action="store_true",
         help="Reuse temporary cache results first; crawl only cache misses",
+    )
+    ingest.add_argument(
+        "--refresh",
+        action="store_true",
+        help="Force live crawl and bypass cache read for this run",
     )
     ingest.add_argument("--store", action="store_true", help="Persist artifacts to data/ and catalog")
     ingest.add_argument("--present", action="store_true", help="Print normalized presentation blocks for LLM summarization")
@@ -162,7 +169,52 @@ def _llm_outputs_state(parsed_output) -> str:
     return "missing"
 
 
-def _regenerate_llm_outputs_from_full_body(result) -> None:
+async def _run_llm_regen_command(payload_json: str) -> tuple[int, str, str]:
+    cmd = os.getenv("ONEFETCH_LLM_REGEN_CMD", "").strip()
+    if not cmd:
+        return 127, "", "ONEFETCH_LLM_REGEN_CMD is not configured"
+    argv = shlex.split(cmd)
+    if not argv:
+        return 127, "", "ONEFETCH_LLM_REGEN_CMD is empty"
+    proc = await asyncio.create_subprocess_exec(
+        *argv,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await proc.communicate(payload_json.encode("utf-8"))
+    return proc.returncode, stdout.decode("utf-8", errors="replace"), stderr.decode("utf-8", errors="replace")
+
+
+async def _try_llm_regenerate(result) -> bool:
+    payload = {
+        "source_url": result.source_url,
+        "canonical_url": result.canonical_url,
+        "crawler_id": result.crawler_id,
+        "title": result.title,
+        "body_full": result.body_full,
+    }
+    code, stdout, stderr = await _run_llm_regen_command(json.dumps(payload, ensure_ascii=False))
+    if code != 0 or not (stdout or "").strip():
+        if stderr.strip():
+            result.llm_outputs.extras = {**result.llm_outputs.extras, "llm_regen_error": stderr.strip()[:400]}
+        return False
+    parsed = parse_and_validate_llm_outputs(stdout)
+    state = _llm_outputs_state(parsed)
+    if state != "ok":
+        result.llm_outputs.extras = {
+            **result.llm_outputs.extras,
+            "llm_regen_error": "llm_regen_output_invalid",
+            "llm_regen_raw_output": stdout[:400],
+        }
+        return False
+    result.llm_outputs = parsed
+    result.llm_outputs.extras = {**result.llm_outputs.extras, "regenerated_by": "llm_command"}
+    result.llm_outputs_state = "ok"
+    return True
+
+
+def _regenerate_llm_outputs_from_rules(result) -> None:
     body = (result.body_full or result.body_excerpt or result.body_preview or "").strip()
     if not body:
         return
@@ -193,17 +245,24 @@ def _regenerate_llm_outputs_from_full_body(result) -> None:
     result.llm_outputs.extras = {
         **previous_extras,
         "regenerated_from_full_body": True,
+        "regenerated_by": "heuristic_rules",
         "previous_state": result.llm_outputs_state,
+        "user_notice": (
+            "正文内容已正常保存；但本次摘要/要点/标签是自动整理结果，可能不够准确。"
+            "你可以稍后让我重新整理这部分。"
+        ),
     }
     result.llm_outputs_state = "ok"
 
 
-def _ensure_store_ready_llm_outputs(report) -> None:
+async def _ensure_store_ready_llm_outputs(report) -> None:
     for result in report.results:
         if result.status == "failed":
             continue
         if result.llm_outputs_state in {"fallback", "missing"}:
-            _regenerate_llm_outputs_from_full_body(result)
+            llm_regenerated = await _try_llm_regenerate(result)
+            if not llm_regenerated:
+                _regenerate_llm_outputs_from_rules(result)
 
 
 def _preview_text(text: str, limit: int = 280) -> str:
@@ -259,6 +318,8 @@ def _print_present(report) -> None:
             print(f"- llm_tags: {', '.join(result.llm_outputs.tags)}")
         if result.llm_outputs.extras.get("validation_error"):
             print(f"- llm_output_validation_error: {result.llm_outputs.extras['validation_error']}")
+        if result.llm_outputs.extras.get("regenerated_by") == "heuristic_rules":
+            print(f"- notice: {result.llm_outputs.extras.get('user_notice')}")
         if result.cache_path:
             print(f"- cache_path: {result.cache_path}")
         print()
@@ -291,7 +352,7 @@ async def run_ingest(args: argparse.Namespace) -> int:
     report = BatchIngestReport(requested_urls=urls)
     pending_urls = urls
     cached_results_by_url: dict[str, IngestResult] = {}
-    if args.from_cache and cache_service is not None:
+    if args.from_cache and not args.refresh and cache_service is not None:
         pending_urls = []
         for source_url in urls:
             cached = cache_service.load_latest_result(source_url)
@@ -320,7 +381,7 @@ async def run_ingest(args: argparse.Namespace) -> int:
             result.llm_outputs_state = parsed_state
 
     if args.store:
-        _ensure_store_ready_llm_outputs(report)
+        await _ensure_store_ready_llm_outputs(report)
 
     if cache_service is not None:
         for result in report.results:

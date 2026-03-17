@@ -101,6 +101,35 @@ def test_ingest_from_cache_skips_second_crawl(tmp_path, monkeypatch) -> None:
     assert FakeAdapter.calls == 1
 
 
+def test_ingest_refresh_bypasses_cache_even_with_from_cache(tmp_path, monkeypatch) -> None:
+    FakeAdapter.calls = 0
+    monkeypatch.setattr(cli, "create_default_adapters", lambda: [FakeAdapter()])
+
+    first_exit = cli.main(
+        [
+            "ingest",
+            "https://example.com",
+            "--project-root",
+            str(tmp_path),
+        ]
+    )
+    assert first_exit == 0
+    assert FakeAdapter.calls == 1
+
+    second_exit = cli.main(
+        [
+            "ingest",
+            "https://example.com",
+            "--project-root",
+            str(tmp_path),
+            "--from-cache",
+            "--refresh",
+        ]
+    )
+    assert second_exit == 0
+    assert FakeAdapter.calls == 2
+
+
 def test_ingest_present_reads_default_llm_output_file(tmp_path, capsys, monkeypatch) -> None:
     monkeypatch.setattr(cli, "create_default_adapters", lambda: [FakeAdapter()])
     reports_dir = tmp_path / "reports"
@@ -191,9 +220,47 @@ def test_store_flow_regenerates_fallback_llm_outputs_from_full_body(tmp_path, ca
     assert FakeAdapter.calls == 1
     assert "- llm_outputs_state: ok" in out
     assert "llm_output_validation_error" not in out
+    assert "正文内容已正常保存" in out
 
     cache_files = sorted((tmp_path / "reports" / "cache").glob("*.json"))
     assert cache_files
     payload = json.loads(cache_files[-1].read_text(encoding="utf-8"))
     assert payload["llm_outputs_state"] == "ok"
     assert payload["llm_outputs"]["extras"]["regenerated_from_full_body"] is True
+    assert "user_notice" in payload["llm_outputs"]["extras"]
+
+
+def test_store_flow_prefers_llm_regeneration_when_command_available(tmp_path, capsys, monkeypatch) -> None:
+    FakeAdapter.calls = 0
+    monkeypatch.setattr(cli, "create_default_adapters", lambda: [FakeAdapter()])
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    (reports_dir / "llm_output.json").write_text(
+        "summary: invalid\nkey_points: [x,y]",
+        encoding="utf-8",
+    )
+
+    async def fake_llm_regen_command(payload_json: str) -> tuple[int, str, str]:
+        assert "full content" in payload_json
+        return 0, '{"summary":"regen summary","key_points":["r1","r2"],"tags":["regen"]}', ""
+
+    monkeypatch.setenv("ONEFETCH_LLM_REGEN_CMD", "mock-llm-cmd")
+    monkeypatch.setattr(cli, "_run_llm_regen_command", fake_llm_regen_command)
+
+    exit_code = cli.main(
+        [
+            "ingest",
+            "https://example.com",
+            "--project-root",
+            str(tmp_path),
+            "--store",
+            "--present",
+        ]
+    )
+    out = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "- llm_summary: regen summary" in out
+    assert "- llm_outputs_state: ok" in out
+    assert "- llm_tags: regen" in out
+    assert "llm_output_validation_error" not in out
