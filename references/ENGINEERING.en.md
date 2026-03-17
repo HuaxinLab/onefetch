@@ -1,5 +1,3 @@
-> Sync status: This English document may lag behind the Chinese version (.md).
-
 # Engineering Guide
 
 This document merges the previous implementation guide and plan.
