@@ -7,4 +7,4 @@ def test_ingest_present_mode_outputs_block(capsys) -> None:
 
     assert exit_code == 0
     assert "## Present" in out
-    assert "- key_points:" in out
+    assert "### Item 1" in out
