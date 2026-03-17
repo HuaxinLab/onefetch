@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 
+import pytest
+
 from onefetch.adapters.xiaohongshu import XiaohongshuAdapter
 
 
@@ -37,3 +39,84 @@ def test_extract_note_id_for_discovery_item() -> None:
     adapter = XiaohongshuAdapter()
     note_id = adapter._extract_note_id("https://www.xiaohongshu.com/discovery/item/69b81c12000000002103afee?x=1")
     assert note_id == "69b81c12000000002103afee"
+
+
+class _FakeResponse:
+    def __init__(self, payload: dict, status_code: int = 200) -> None:
+        self._payload = payload
+        self.status_code = status_code
+
+    def json(self) -> dict:
+        return self._payload
+
+
+class _FakeClient:
+    def __init__(self, responses: list[_FakeResponse]) -> None:
+        self._responses = responses
+        self.calls = 0
+
+    async def get(self, url: str):  # noqa: ANN001
+        response = self._responses[min(self.calls, len(self._responses) - 1)]
+        self.calls += 1
+        return response
+
+
+class _FakeClientContext:
+    def __init__(self, client: _FakeClient) -> None:
+        self.client = client
+
+    async def __aenter__(self) -> _FakeClient:
+        return self.client
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:  # noqa: ANN001
+        return None
+
+
+async def test_fetch_comments_pagination_and_dedup(monkeypatch: pytest.MonkeyPatch) -> None:
+    adapter = XiaohongshuAdapter()
+    monkeypatch.setenv("ONEFETCH_XHS_COOKIE", "session=ok")
+    monkeypatch.setenv("ONEFETCH_XHS_COMMENT_MAX_PAGES", "5")
+    monkeypatch.setenv("ONEFETCH_XHS_COMMENT_MAX_ITEMS", "50")
+
+    page1 = _FakeResponse(
+        {
+            "success": True,
+            "data": {
+                "comments": [
+                    {"content": "A", "user_info": {"nickname": "u1"}},
+                    {"content": "B", "user_info": {"nickname": "u2"}},
+                ],
+                "has_more": True,
+                "cursor": "c1",
+            },
+        }
+    )
+    page2 = _FakeResponse(
+        {
+            "success": True,
+            "data": {
+                "comments": [
+                    {"content": "B", "user_info": {"nickname": "u2"}},  # duplicate
+                    {"content": "C", "user_info": {"nickname": "u3"}},
+                ],
+                "has_more": False,
+                "cursor": "c2",
+            },
+        }
+    )
+    fake_client = _FakeClient([page1, page2])
+
+    def fake_create_async_client(**kwargs):  # noqa: ANN003
+        return _FakeClientContext(fake_client)
+
+    monkeypatch.setattr("onefetch.adapters.xiaohongshu.create_async_client", fake_create_async_client)
+    comments, status = await adapter._fetch_comments(
+        "68075b1d000000001b03c4f0",
+        canonical_url="https://www.xiaohongshu.com/explore/68075b1d000000001b03c4f0",
+    )
+
+    assert [item.text for item in comments] == ["A", "B", "C"]
+    assert status["status"] == "ok"
+    assert status["count"] == 3
+    assert status["pages_fetched"] == 2
+    assert status["has_more"] is False

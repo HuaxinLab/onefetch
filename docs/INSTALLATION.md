@@ -81,6 +81,19 @@ export ONEFETCH_XHS_COMMENT_MAX_PAGES=3
 export ONEFETCH_XHS_COMMENT_MAX_ITEMS=50
 ```
 
+Example (logged-in comment capture):
+
+```bash
+export ONEFETCH_XHS_COOKIE='...'
+export ONEFETCH_XHS_COMMENT_MODE='state+api'
+export ONEFETCH_XHS_COMMENT_MAX_PAGES=3
+onefetch ingest "https://www.xiaohongshu.com/explore/..."
+```
+
+Expected result in feed metadata:
+- `metadata.comment_fetch.source = api`
+- `metadata.comment_fetch.api.count > 0`
+
 For DOM fallback, install browser support first:
 
 ```bash
