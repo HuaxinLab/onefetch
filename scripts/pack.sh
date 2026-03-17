@@ -4,16 +4,14 @@ set -euo pipefail
 PROJECT_ROOT="${ONEFETCH_PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 OUTPUT_DIR="${ONEFETCH_PACK_OUTPUT_DIR:-dist}"
 ARCHIVE_NAME=""
-CLEAN_BEFORE=0
 
 usage() {
   cat <<USAGE
-Usage: scripts/pack.sh [--name <zip-name>] [--output <dir>] [--clean-before]
+Usage: scripts/pack.sh [--name <zip-name>] [--output <dir>]
 
 Options:
   --name <zip-name>     Archive name (e.g., onefetch.zip)
   --output <dir>        Output directory (default: dist)
-  --clean-before        Run scripts/clean.sh before packing
   -h, --help            Show help
 USAGE
 }
@@ -27,10 +25,6 @@ while [[ $# -gt 0 ]]; do
     --output)
       OUTPUT_DIR="${2:-}"
       shift 2
-      ;;
-    --clean-before)
-      CLEAN_BEFORE=1
-      shift
       ;;
     -h|--help)
       usage
@@ -50,10 +44,6 @@ if [[ -z "$ARCHIVE_NAME" ]]; then
 fi
 
 cd "$PROJECT_ROOT"
-
-if [[ "$CLEAN_BEFORE" == "1" ]]; then
-  bash scripts/clean.sh
-fi
 
 mkdir -p "$OUTPUT_DIR"
 

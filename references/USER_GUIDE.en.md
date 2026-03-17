@@ -66,5 +66,5 @@ bash scripts/run_ingest.sh --store "https://example.com/article"
 bash scripts/run_ingest.sh --list-crawlers
 ONEFETCH_GENERIC_RENDER_MODE=browser bash scripts/run_ingest.sh "URL"
 bash scripts/clean.sh
-bash scripts/pack.sh --clean-before
+bash scripts/pack.sh
 ```
