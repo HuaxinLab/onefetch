@@ -44,6 +44,14 @@ ONEFETCH_INSECURE_TLS=1 onefetch ingest "https://example.com"
 
 Use this only for local debugging.
 
+Default TLS behavior:
+- OneFetch uses system trust store (`truststore`) by default.
+- If needed, force `certifi` bundle:
+
+```bash
+ONEFETCH_TLS_CERTIFI=1 onefetch ingest "https://example.com"
+```
+
 ## Skill installation (later phase)
 
 ```bash
