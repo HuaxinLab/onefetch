@@ -1,6 +1,6 @@
 ---
 name: onefetch
-description: Focused cross-platform URL ingestion for Xiaohongshu and generic HTML pages. Use when users share links and want deterministic capture into local artifacts (raw/feed/note).
+description: 跨平台链接采集（小红书 + 通用网页）。当用户提出“抓取/采集/归档链接、保存网页内容、小红书内容提取”等请求时使用。Focused URL ingestion for Xiaohongshu and generic HTML with deterministic local artifacts (raw/feed/note).
 argument-hint: [url-or-free-text]
 ---
 
