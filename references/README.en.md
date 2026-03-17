@@ -46,6 +46,20 @@ After installation, tell the agent (this is all non-technical users need):
 - "Summarize this WeChat article"
 - "Fetch this Xiaohongshu post and list key points"
 
+## Common Scenarios
+
+- Scenario 1: Quick first-pass reading
+: "Read this webpage and summarize it in 3 key points: <URL>"
+
+- Scenario 2: Valuable content, save it
+: "Organize this content and save it."
+
+- Scenario 3: Agent says body is saved but structured summary may be inaccurate
+: "Use the saved full text and regenerate summary and tags." (No need to refetch URL)
+
+- Scenario 4: You want the latest page content
+: "Refresh this URL first, then re-organize and save it: <URL>"
+
 ## Directory Layout
 
 - `SKILL.md`
