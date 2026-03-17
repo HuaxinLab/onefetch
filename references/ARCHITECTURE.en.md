@@ -1,5 +1,3 @@
-> Sync status: This English document may lag behind the Chinese version (.md).
-
 # Architecture
 
 ## 1. Design Goals

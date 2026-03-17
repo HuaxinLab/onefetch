@@ -67,9 +67,3 @@ bash scripts/doctor.sh
 
 - 使用说明（推荐先看）：[references/USER_GUIDE.md](./references/USER_GUIDE.md)
 - 文档索引：[references/INDEX.md](./references/INDEX.md)
-
-## 其他文档
-
-- [references/ARCHITECTURE.md](./references/ARCHITECTURE.md)
-- [references/REQUIREMENTS.md](./references/REQUIREMENTS.md)
-- [references/ENGINEERING.md](./references/ENGINEERING.md)
