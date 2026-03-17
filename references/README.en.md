@@ -2,14 +2,14 @@
 
 **语言 / Language**: [中文](../README.md) | [English](./README.en.md)
 
-OneFetch is a skill-first web reading tool with a maintainable Python core.
+OneFetch is an agent-facing web reading skill.
 
 Supported sources:
 - Xiaohongshu
 - WeChat Official Account pages
 - Generic HTML pages (including JS-heavy pages)
 
-Default mode is fetch-only. Use `--store` only when users explicitly ask for persistence.
+Default use case is fast reading: fetch cleaned full text and let the LLM summarize.
 
 ## Clone
 
@@ -21,15 +21,15 @@ cd onefetch
 ## Purpose
 
 - Provide a stable, unified web-reading capability for agents.
-- Return structured outputs for LLM summarization and decision-making.
-- Keep default behavior non-persistent (read first, store later).
+- Return cleaned body text for LLM summarization, translation, and deeper analysis.
+- Prefer cache-first reading by default to avoid repeated crawling.
 
 ## Typical Use Cases
 
 - Let an agent read and summarize a WeChat Official Account article.
 - Let an agent fetch a Xiaohongshu post, with comments when needed.
 - Let an agent handle generic webpages in the same unified flow.
-- Store structured local records only after the user confirms.
+- Store content only after the user explicitly confirms.
 
 ## Install Into Agent (Recommended)
 
@@ -41,21 +41,10 @@ Example for Codex:
 ln -s <project-root> ~/.codex/skills/onefetch
 ```
 
-After installation, tell the agent:
+After installation, tell the agent (this is all non-technical users need):
 - "Read this webpage: <URL>"
 - "Summarize this WeChat article"
 - "Fetch this Xiaohongshu post and list key points"
-
-For the first run, let the agent initialize the environment:
-
-```bash
-bash scripts/bootstrap.sh
-bash scripts/doctor.sh
-```
-
-After that, the agent should normally use:
-- `bash scripts/run_ingest.sh --present "URL"`
-- Add `--store` only when you explicitly ask to save
 
 ## Directory Layout
 
@@ -67,5 +56,5 @@ After that, the agent should normally use:
 
 ## Documentation Entry
 
-- User Guide (start here): [references/USER_GUIDE.en.md](./USER_GUIDE.en.md)
+- This page is the user usage guide (agent-first scenarios).
 - Docs index: [references/INDEX.md](./INDEX.md)

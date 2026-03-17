@@ -10,6 +10,7 @@ from onefetch.storage import StorageService
 
 class FakeAdapter(BaseAdapter):
     id = "fake"
+    register = False
 
     def supports(self, url: str) -> bool:
         return True

@@ -37,11 +37,13 @@ class IngestionPipeline:
                     "source_url": source_url,
                     "canonical_url": output.feed.canonical_url,
                     "crawler_id": adapter.id,
+                    "content_hash": output.feed.content_hash,
                     "title": output.feed.title,
                     "comment_count": len(output.feed.comments),
                     "comment_source": comment_source,
                     "body_preview": self._preview(output.feed.body, limit=280),
                     "body_excerpt": self._preview(output.feed.body, limit=1600),
+                    "body_full": (output.feed.body or "").strip(),
                     "risk_controlled": risk_controlled,
                 }
 

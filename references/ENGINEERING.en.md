@@ -7,7 +7,11 @@ This document merges the previous implementation guide and plan.
 Completed:
 - single skill entry (`SKILL.md`)
 - three adapters (`xiaohongshu` / `wechat` / `generic_html`)
-- default fetch-only with explicit `--store`
+- adapter auto-registration with priority routing (specialized adapters first, `generic_html` as fallback)
+- default cache-first read flow (`--present --from-cache`)
+- explicit `--store` persistence
+- temp cache size control (`--cache-max-items`)
+- default LLM output backfill (`reports/llm_output.json`, overridable via `--llm-output-file`)
 - one-time cookie setup and auto-load
 - packing and cleanup scripts
 
@@ -36,7 +40,7 @@ Recommended flow:
 
 1. add `onefetch/adapters/<platform>.py`
 2. implement `supports/crawl`
-3. register adapter in CLI initialization
+3. set `id` and `priority` (auto-registered by base adapter)
 4. add tests:
 - routing hit
 - adapter parsing
@@ -46,7 +50,7 @@ Recommended flow:
 
 Before merge:
 - full test pass
-- doc sync (`README` / `SKILL` / `USER_GUIDE`)
+- doc sync (`README` / `SKILL` / `ENGINEERING`)
 - no sensitive data committed (cookie/session)
 
 ## 6. Rolling Roadmap

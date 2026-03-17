@@ -2,12 +2,12 @@
 
 **语言 / Language**: [中文](./README.md) | [English](./references/README.en.md)
 
-OneFetch 是一个“Skill 外壳 + Python 内核”的网页读取工具，支持：
+OneFetch 是一个面向 agent 的网页读取 skill，支持：
 - 小红书
 - 微信公众号
 - 通用 HTML（含 JS 渲染）
 
-默认是读取展示（fetch-only），只有显式 `--store` 才写入本地。
+默认用于快速阅读：抓取去噪后的正文并交给大模型归纳总结。
 
 ## 下载到本地（Clone）
 
@@ -19,15 +19,14 @@ cd onefetch
 ## 工具作用
 
 - 给 agent 提供统一网页读取能力（而不是依赖不稳定的临时抓取）。
-- 输出统一结构，便于大模型做总结、要点提炼、对比与归档决策。
-- 默认不存储，先读后存，减少误存和无效数据。
+- 返回去噪正文，适合大模型做总结、翻译和深度整理。
+- 默认优先复用缓存，避免重复抓取。
 
 ## 适用场景
 
-- 让 agent 读取并总结微信公众号文章。
-- 让 agent 抓取小红书正文（可选评论）。
-- 让 agent 统一处理通用网页内容并输出摘要/要点。
-- 用户确认后再存储为本地结构化记录。
+- 快速了解网页主要内容（摘要 + 要点）。
+- 对感兴趣内容做进一步翻译或深入分析。
+- 用户确认后再做保存/归档。
 
 ## 安装到 Agent（推荐）
 
@@ -39,21 +38,10 @@ cd onefetch
 ln -s <project-root> ~/.codex/skills/onefetch
 ```
 
-安装后直接对 agent 说：
+安装后直接对 agent 说（普通用户只需要这一步）：
 - “读取这个网页：<URL>”
 - “总结这条公众号内容”
 - “抓这个小红书并输出要点”
-
-首次可让 agent 执行环境初始化：
-
-```bash
-bash scripts/bootstrap.sh
-bash scripts/doctor.sh
-```
-
-后续 agent 默认应使用：
-- `bash scripts/run_ingest.sh --present "URL"`
-- 仅在你明确要求保存时才加 `--store`
 
 ## 目录结构（Skill 规范）
 
@@ -65,5 +53,5 @@ bash scripts/doctor.sh
 
 ## 文档入口
 
-- 使用说明（推荐先看）：[references/USER_GUIDE.md](./references/USER_GUIDE.md)
+- 本页即用户使用说明（agent 场景）。
 - 文档索引：[references/INDEX.md](./references/INDEX.md)
