@@ -1,0 +1,71 @@
+Metadata-Version: 2.4
+Name: onefetch
+Version: 0.1.0
+Summary: Focused cross-platform content ingestion (Xiaohongshu + generic HTML)
+Author: OneFetch Contributors
+License: MIT
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: httpx>=0.27.0
+Requires-Dist: pydantic>=2.7.0
+Requires-Dist: lxml>=5.2.0
+Requires-Dist: certifi>=2024.0.0
+Provides-Extra: browser
+Requires-Dist: playwright>=1.40.0; extra == "browser"
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0.0; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.23.0; extra == "dev"
+
+# OneFetch
+
+OneFetch is a focused cross-platform content ingestion tool.
+
+Current phase goal:
+- Support `xiaohongshu` and `generic_html`
+- Keep architecture simple and extensible
+- Provide one CLI entrypoint and one Skill-facing workflow
+
+## Project status
+
+Scaffold and baseline docs are ready.
+Core CLI, router, storage, and adapter skeletons are implemented.
+
+## Documentation index
+
+- `docs/PLAN.md`
+- `docs/REQUIREMENTS.md`
+- `docs/ARCHITECTURE.md`
+- `docs/INSTALLATION.md`
+- `docs/IMPLEMENTATION_GUIDE.md`
+
+## Scope of v0.1
+
+- URL routing
+- Two adapters (`xiaohongshu`, `generic_html`)
+- Unified output schema
+- Unified data storage (`data/raw`, `data/feed`, `data/notes`)
+- CLI command: `onefetch ingest <url>`
+
+## Quick start
+
+```bash
+cd ~/Projects/acusp/OneFetch
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -U pip
+pip install -e ".[dev]"
+```
+
+Optional browser support:
+
+```bash
+pip install -e ".[browser]"
+playwright install chromium
+```
+
+Verify:
+
+```bash
+onefetch --help
+onefetch ingest --help
+```

@@ -1,0 +1,2 @@
+[console_scripts]
+onefetch = onefetch.cli:main
