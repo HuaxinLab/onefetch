@@ -44,3 +44,5 @@ ONEFETCH_XHS_COMMENT_MODE='state+api' \
 - 用户说明：`references/USER_GUIDE.md`
 - 文档索引：`references/INDEX.md`
 - 架构：`references/ARCHITECTURE.md`
+- 需求：`references/REQUIREMENTS.md`
+- 工程：`references/ENGINEERING.md`

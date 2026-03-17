@@ -66,6 +66,5 @@ bash scripts/doctor.sh
 ## 其他文档
 
 - `references/ARCHITECTURE.md`
-- `references/IMPLEMENTATION_GUIDE.md`
 - `references/REQUIREMENTS.md`
-- `references/PLAN.md`
+- `references/ENGINEERING.md`
