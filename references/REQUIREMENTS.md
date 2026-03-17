@@ -1,15 +1,76 @@
-# Requirements
+# 需求说明（Requirements）
 
-## Functional
+## 1. 产品定位
 
-1. Single skill entry: root `SKILL.md`.
-2. Unified command: `bash scripts/run_ingest.sh ...`.
-3. Default fetch-only behavior.
-4. Optional persistence via `--store`.
-5. Router-based platform dispatch (`xiaohongshu`, `wechat`, `generic_html`).
+OneFetch 的目标不是做大规模爬虫平台，而是给 agent 提供稳定、可控、可扩展的网页读取能力。
 
-## Non-functional
+关键定位：
+- 单一 skill 入口
+- 跨平台网页读取（小红书/微信公众号/通用 HTML）
+- 先读取再决策是否存储
 
-1. Maintainable Python core (`onefetch/`).
-2. Non-developer friendly shell wrapper (`scripts/`).
-3. Deterministic outputs and explicit errors.
+## 2. 功能需求
+
+### 2.1 Skill 与入口
+
+1. 根目录必须提供 `SKILL.md`。
+2. `scripts/run_ingest.sh` 必须是统一执行入口。
+3. agent 必须能在不懂代码的用户场景下完成初始化与抓取。
+
+### 2.2 抓取能力
+
+1. 支持平台：
+- `xiaohongshu`
+- `wechat`
+- `generic_html`
+2. 支持从 URL 或自由文本中提取 URL。
+3. 默认输出可读摘要（`--present`）。
+
+### 2.3 存储策略
+
+1. 默认 fetch-only，不写 `data/`。
+2. 仅在显式 `--store` 时写入产物。
+3. 持久化产物目录必须可预测（`data/raw|feed|notes`）。
+
+### 2.4 评论能力（小红书）
+
+1. 无 Cookie 时允许正文抓取。
+2. 需要评论时支持 cookie 驱动模式。
+3. 必须提供一次性配置脚本（`setup_xhs_cookie.sh`）。
+
+### 2.5 报告与可观测性
+
+1. 支持运行报告输出（JSON/MD）。
+2. 输出错误分类（`error_code/error_type/retryable`）。
+3. 允许 agent 根据错误可恢复性给出下一步建议。
+
+## 3. 非功能需求
+
+### 3.1 易用性
+
+- 普通用户通过 agent 自然语言使用。
+- 开发者可直接脚本调用。
+
+### 3.2 可维护性
+
+- 平台逻辑隔离在 adapter。
+- 核心 pipeline 不随平台数量显著复杂化。
+
+### 3.3 稳定性
+
+- 同一输入在源站未变化时输出应尽量稳定。
+- 测试应覆盖核心路径与主要回归风险。
+
+### 3.4 安全性
+
+- 敏感数据（cookie）不应进入版本库。
+- 清理脚本需有确认提示，避免误删重要数据。
+
+## 4. 验收标准
+
+至少满足：
+1. agent 可调用 skill 完成 3 类链接抓取（xhs/wechat/html）。
+2. 默认 fetch-only 流程可用。
+3. `--store` 流程可用并写入预期目录。
+4. cookie 一次配置后可复用。
+5. 打包脚本产物可在目标机器部署使用。
