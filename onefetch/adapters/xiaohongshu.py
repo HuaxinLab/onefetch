@@ -19,6 +19,7 @@ from onefetch.router import normalize_url
 
 class XiaohongshuAdapter(BaseAdapter):
     id = "xiaohongshu"
+    priority = 100
     _api_risk_cooldown_until: float = 0.0
     _api_last_request_at: float = 0.0
 

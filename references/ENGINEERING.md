@@ -7,7 +7,11 @@
 已完成：
 - 单一 skill 入口（`SKILL.md`）
 - 三平台 adapter（`xiaohongshu` / `wechat` / `generic_html`）
-- 默认 fetch-only + 显式 `--store`
+- adapter 自动注册与优先级路由（专用 adapter 优先，`generic_html` 兜底）
+- 默认 cache-first 读取（`--present --from-cache`）
+- 显式 `--store` 持久化
+- 临时缓存上限控制（`--cache-max-items`）
+- 模型输出默认回填（`reports/llm_output.json`，可用 `--llm-output-file` 覆盖）
 - cookie 一次配置与自动加载
 - 打包与清理脚本
 
@@ -36,7 +40,7 @@ bash scripts/doctor.sh
 
 1. 新建 `onefetch/adapters/<platform>.py`
 2. 实现 `supports/crawl`
-3. 注册到 CLI adapter 列表
+3. 设置 `id` 与 `priority`（通过基类自动注册）
 4. 增加测试：
 - 路由命中测试
 - adapter 解析测试
@@ -46,7 +50,7 @@ bash scripts/doctor.sh
 
 合并前至少满足：
 - 全量测试通过
-- 关键文档同步（README / SKILL / USER_GUIDE）
+- 关键文档同步（README / SKILL / ENGINEERING）
 - 无敏感信息入库（cookie/session）
 
 ## 6. 后续路线（滚动）

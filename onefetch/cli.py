@@ -9,8 +9,11 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
-from onefetch.adapters import GenericHtmlAdapter, WechatAdapter, XiaohongshuAdapter
+from onefetch.adapters import create_default_adapters
+from onefetch.cache import TempCacheService
 from onefetch.config import OneFetchConfig
+from onefetch.llm_outputs import parse_and_validate_llm_outputs
+from onefetch.models import BatchIngestReport, IngestResult
 from onefetch.pipeline import IngestionPipeline
 from onefetch.router import Router
 from onefetch.storage import StorageService
@@ -44,6 +47,28 @@ def build_parser() -> argparse.ArgumentParser:
     ingest.add_argument("--list-crawlers", action="store_true", help="List available adapters")
     ingest.add_argument("--report-json", default="", help="Optional output path for run summary JSON")
     ingest.add_argument("--report-md", default="", help="Optional output path for run summary Markdown")
+    ingest.add_argument(
+        "--llm-output-file",
+        default="",
+        help="Optional override path for raw LLM output (JSON/text). Default path: reports/llm_output.json",
+    )
+    ingest.add_argument(
+        "--cache-temp",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Write temporary cache files under reports/cache (default: enabled)",
+    )
+    ingest.add_argument(
+        "--cache-max-items",
+        type=int,
+        default=200,
+        help="Maximum number of temp cache files to keep (default: 200)",
+    )
+    ingest.add_argument(
+        "--from-cache",
+        action="store_true",
+        help="Reuse temporary cache results first; crawl only cache misses",
+    )
     ingest.add_argument("--store", action="store_true", help="Persist artifacts to data/ and catalog")
     ingest.add_argument("--present", action="store_true", help="Print normalized presentation blocks for LLM summarization")
     return parser
@@ -121,6 +146,22 @@ def _write_report_files(summary: dict, *, json_path: str, md_path: str) -> None:
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def _resolve_llm_output_path(args: argparse.Namespace, reports_dir: Path) -> Path | None:
+    if args.llm_output_file:
+        path = Path(args.llm_output_file).expanduser()
+        return path if path.exists() else None
+    default_path = reports_dir / "llm_output.json"
+    return default_path if default_path.exists() else None
+
+
+def _llm_outputs_state(parsed_output) -> str:
+    if parsed_output.extras.get("validation_error"):
+        return "fallback"
+    if parsed_output.summary or parsed_output.key_points or parsed_output.tags:
+        return "ok"
+    return "missing"
+
+
 def _build_key_points(text: str, max_points: int = 3) -> list[str]:
     cleaned = " ".join((text or "").split())
     if not cleaned:
@@ -151,11 +192,29 @@ def _print_present(report) -> None:
                 print(f"  - {point}")
         if result.body_preview:
             print(f"- summary: {result.body_preview}")
+        if result.body_full:
+            print("- full_body:")
+            print("```text")
+            print(result.body_full)
+            print("```")
+        if result.llm_outputs.summary:
+            print(f"- llm_summary: {result.llm_outputs.summary}")
+        print(f"- llm_outputs_state: {result.llm_outputs_state}")
+        if result.llm_outputs.key_points:
+            print("- llm_key_points:")
+            for point in result.llm_outputs.key_points:
+                print(f"  - {point}")
+        if result.llm_outputs.tags:
+            print(f"- llm_tags: {', '.join(result.llm_outputs.tags)}")
+        if result.llm_outputs.extras.get("validation_error"):
+            print(f"- llm_output_validation_error: {result.llm_outputs.extras['validation_error']}")
+        if result.cache_path:
+            print(f"- cache_path: {result.cache_path}")
         print()
 
 
 async def run_ingest(args: argparse.Namespace) -> int:
-    adapters = [XiaohongshuAdapter(), WechatAdapter(), GenericHtmlAdapter()]
+    adapters = create_default_adapters()
     router = Router(adapters)
 
     if args.list_crawlers:
@@ -168,16 +227,54 @@ async def run_ingest(args: argparse.Namespace) -> int:
         print("No URLs found. Pass URLs directly or via --text.")
         return 2
 
+    config = OneFetchConfig.from_project_root(args.project_root)
+    paths = config.paths()
     storage = None
     if args.store:
-        config = OneFetchConfig.from_project_root(args.project_root)
-        storage = StorageService(config.paths())
+        storage = StorageService(paths)
+    cache_service = TempCacheService(paths, max_entries=args.cache_max_items) if args.cache_temp else None
 
     pipeline = IngestionPipeline(router=router, storage=storage)
 
     start = time.monotonic()
-    report = await pipeline.ingest_urls(urls, forced_adapter=args.crawler or None, store=args.store)
+    report = BatchIngestReport(requested_urls=urls)
+    pending_urls = urls
+    cached_results_by_url: dict[str, IngestResult] = {}
+    if args.from_cache and cache_service is not None:
+        pending_urls = []
+        for source_url in urls:
+            cached = cache_service.load_latest_result(source_url)
+            if cached is None:
+                pending_urls.append(source_url)
+                continue
+            cached.cache_path = "<cache-hit>"
+            cached_results_by_url[source_url] = cached
+
+    if pending_urls:
+        fresh_report = await pipeline.ingest_urls(pending_urls, forced_adapter=args.crawler or None, store=args.store)
+        for result in fresh_report.results:
+            cached_results_by_url[result.source_url] = result
+
+    report.results = [cached_results_by_url[url] for url in urls if url in cached_results_by_url]
+    report.fetched_count, report.stored_count, report.duplicate_count, report.failed_count = _count_result_statuses(report)
     duration = time.monotonic() - start
+
+    llm_output_path = _resolve_llm_output_path(args, paths.reports_dir)
+    if llm_output_path is not None:
+        raw_output = llm_output_path.read_text(encoding="utf-8")
+        parsed_output = parse_and_validate_llm_outputs(raw_output)
+        parsed_state = _llm_outputs_state(parsed_output)
+        for result in report.results:
+            result.llm_outputs = parsed_output
+            result.llm_outputs_state = parsed_state
+
+    if cache_service is not None:
+        for result in report.results:
+            if result.status == "failed":
+                continue
+            if result.cache_path == "<cache-hit>":
+                continue
+            result.cache_path = cache_service.save_result(result)
 
     summary = _build_run_summary(report, duration_sec=duration)
     _write_report_files(summary, json_path=args.report_json, md_path=args.report_md)
@@ -211,6 +308,8 @@ async def run_ingest(args: argparse.Namespace) -> int:
             print(f"  feed={result.feed_path}")
         if result.note_path:
             print(f"  note={result.note_path}")
+        if result.cache_path:
+            print(f"  cache={result.cache_path}")
 
     if args.present:
         print("\n## Present")
@@ -221,6 +320,20 @@ async def run_ingest(args: argparse.Namespace) -> int:
     if args.report_md:
         print(f"  report_md={Path(args.report_md).expanduser()}")
     return 0
+
+
+def _count_result_statuses(report: BatchIngestReport) -> tuple[int, int, int, int]:
+    fetched = stored = duplicate = failed = 0
+    for result in report.results:
+        if result.status == "fetched":
+            fetched += 1
+        elif result.status == "stored":
+            stored += 1
+        elif result.status == "duplicate":
+            duplicate += 1
+        elif result.status == "failed":
+            failed += 1
+    return fetched, stored, duplicate, failed
 
 
 def main(argv: list[str] | None = None) -> int:

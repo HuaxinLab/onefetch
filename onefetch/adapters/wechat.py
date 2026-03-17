@@ -15,6 +15,7 @@ from onefetch.router import normalize_url
 
 class WechatAdapter(BaseAdapter):
     id = "wechat"
+    priority = 200
 
     def supports(self, url: str) -> bool:
         host = (urlparse(url).hostname or "").lower()

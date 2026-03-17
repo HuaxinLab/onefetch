@@ -15,6 +15,7 @@ from onefetch.router import normalize_url
 
 class GenericHtmlAdapter(BaseAdapter):
     id = "generic_html"
+    priority = 1000
 
     def supports(self, url: str) -> bool:
         return True

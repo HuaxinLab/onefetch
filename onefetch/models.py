@@ -58,11 +58,19 @@ class CrawlOutput(BaseModel):
     feed: FeedEntry
 
 
+class LLMOutputs(BaseModel):
+    summary: str = ""
+    key_points: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    extras: dict[str, Any] = Field(default_factory=dict)
+
+
 class IngestResult(BaseModel):
     source_url: str
     canonical_url: str
     crawler_id: str
     status: Literal["fetched", "stored", "duplicate", "failed"]
+    content_hash: str = ""
     title: str = ""
     error: str = ""
     error_code: str = ""
@@ -75,6 +83,10 @@ class IngestResult(BaseModel):
     comment_source: str = "none"
     body_preview: str = ""
     body_excerpt: str = ""
+    body_full: str = ""
+    cache_path: str = ""
+    llm_outputs: LLMOutputs = Field(default_factory=LLMOutputs)
+    llm_outputs_state: Literal["missing", "ok", "fallback"] = "missing"
     risk_controlled: bool = False
 
 
