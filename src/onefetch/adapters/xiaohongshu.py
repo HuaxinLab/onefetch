@@ -3,7 +3,9 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import random
 import re
+import time
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
@@ -17,6 +19,8 @@ from onefetch.router import normalize_url
 
 class XiaohongshuAdapter(BaseAdapter):
     id = "xiaohongshu"
+    _api_risk_cooldown_until: float = 0.0
+    _api_last_request_at: float = 0.0
 
     def supports(self, url: str) -> bool:
         domain = (urlparse(url).hostname or "").lower()
@@ -287,8 +291,19 @@ class XiaohongshuAdapter(BaseAdapter):
         cookie = os.getenv("ONEFETCH_XHS_COOKIE", "").strip()
         if not cookie:
             return [], {"status": "skipped", "reason": "missing_cookie"}
+        cooldown_remaining = self._risk_cooldown_remaining()
+        if cooldown_remaining > 0:
+            return [], {
+                "status": "skipped",
+                "reason": "risk_cooldown",
+                "cooldown_remaining_sec": round(cooldown_remaining, 2),
+            }
         max_pages = self._env_int("ONEFETCH_XHS_COMMENT_MAX_PAGES", default=3, min_value=1, max_value=20)
         max_items = self._env_int("ONEFETCH_XHS_COMMENT_MAX_ITEMS", default=50, min_value=1, max_value=500)
+        max_retries = self._env_int("ONEFETCH_XHS_API_MAX_RETRIES", default=2, min_value=0, max_value=5)
+        min_interval = self._env_float("ONEFETCH_XHS_API_MIN_INTERVAL_SEC", default=1.0, min_value=0.1, max_value=10.0)
+        backoff_base = self._env_float("ONEFETCH_XHS_API_BACKOFF_SEC", default=1.0, min_value=0.1, max_value=10.0)
+        risk_cooldown = self._env_int("ONEFETCH_XHS_API_RISK_COOLDOWN_SEC", default=900, min_value=30, max_value=86400)
         headers = {
             "User-Agent": "Mozilla/5.0 (compatible; OneFetch/0.1)",
             "Accept": "application/json, text/plain, */*",
@@ -308,8 +323,45 @@ class XiaohongshuAdapter(BaseAdapter):
                     url = (
                         f"{endpoint}?note_id={note_id}&cursor={cursor}&top_comment_id=&image_formats=jpg,webp,avif"
                     )
-                    response = await client.get(url)
+                    response = None
+                    payload = None
+                    for attempt in range(max_retries + 1):
+                        await self._wait_api_interval(min_interval)
+                        response = await client.get(url)
+                        self._api_last_request_at = time.monotonic()
+                        if response.status_code == 200:
+                            try:
+                                payload = response.json()
+                            except Exception:
+                                payload = None
+                        if self._is_risk_signal(
+                            http_status=response.status_code,
+                            api_code=(payload or {}).get("code"),
+                        ):
+                            self._mark_risk_cooldown(risk_cooldown)
+                            return parsed, {
+                                "status": "failed",
+                                "reason": "risk_controlled",
+                                "http_status": response.status_code,
+                                "code": (payload or {}).get("code"),
+                                "msg": (payload or {}).get("msg", ""),
+                                "pages_fetched": pages_fetched,
+                                "count": len(parsed),
+                                "cooldown_sec": risk_cooldown,
+                            }
+                        if response.status_code == 200 and isinstance(payload, dict) and payload.get("success"):
+                            break
+                        if attempt < max_retries:
+                            await self._sleep_backoff(backoff_base, attempt)
                     pages_fetched += 1
+
+                    if response is None:
+                        return parsed, {
+                            "status": "failed",
+                            "reason": "request_error",
+                            "pages_fetched": pages_fetched,
+                            "count": len(parsed),
+                        }
                     if response.status_code != 200:
                         return parsed, {
                             "status": "failed",
@@ -317,8 +369,15 @@ class XiaohongshuAdapter(BaseAdapter):
                             "http_status": response.status_code,
                             "pages_fetched": pages_fetched,
                             "count": len(parsed),
+                            "retries": max_retries,
                         }
-                    payload = response.json()
+                    if not isinstance(payload, dict):
+                        return parsed, {
+                            "status": "failed",
+                            "reason": "invalid_payload",
+                            "pages_fetched": pages_fetched,
+                            "count": len(parsed),
+                        }
                     if not payload.get("success"):
                         return parsed, {
                             "status": "failed",
@@ -327,6 +386,7 @@ class XiaohongshuAdapter(BaseAdapter):
                             "msg": payload.get("msg", ""),
                             "pages_fetched": pages_fetched,
                             "count": len(parsed),
+                            "retries": max_retries,
                         }
 
                     data = payload.get("data") or {}
@@ -545,6 +605,43 @@ class XiaohongshuAdapter(BaseAdapter):
         except ValueError:
             return default
         return max(min_value, min(max_value, value))
+
+    @staticmethod
+    def _env_float(name: str, *, default: float, min_value: float, max_value: float) -> float:
+        raw = os.getenv(name, "").strip()
+        if not raw:
+            return default
+        try:
+            value = float(raw)
+        except ValueError:
+            return default
+        return max(min_value, min(max_value, value))
+
+    @classmethod
+    def _risk_cooldown_remaining(cls) -> float:
+        return max(0.0, cls._api_risk_cooldown_until - time.monotonic())
+
+    @classmethod
+    def _mark_risk_cooldown(cls, seconds: int) -> None:
+        cls._api_risk_cooldown_until = max(cls._api_risk_cooldown_until, time.monotonic() + float(seconds))
+
+    @staticmethod
+    def _is_risk_signal(*, http_status: int | None, api_code: int | None) -> bool:
+        if http_status in {429, 461}:
+            return True
+        return api_code in {300011, 300012}
+
+    @classmethod
+    async def _wait_api_interval(cls, min_interval: float) -> None:
+        elapsed = time.monotonic() - cls._api_last_request_at
+        wait_sec = min_interval - elapsed
+        if wait_sec > 0:
+            await asyncio.sleep(wait_sec)
+
+    @staticmethod
+    async def _sleep_backoff(base: float, attempt: int) -> None:
+        jitter = random.uniform(0.0, 0.25)
+        await asyncio.sleep(base * (2**attempt) + jitter)
 
     @staticmethod
     def _extract_balanced_object(text: str, start: int) -> str | None:

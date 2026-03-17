@@ -41,6 +41,12 @@ def test_extract_note_id_for_discovery_item() -> None:
     assert note_id == "69b81c12000000002103afee"
 
 
+def test_risk_signal_detection() -> None:
+    assert XiaohongshuAdapter._is_risk_signal(http_status=461, api_code=None) is True
+    assert XiaohongshuAdapter._is_risk_signal(http_status=200, api_code=300011) is True
+    assert XiaohongshuAdapter._is_risk_signal(http_status=200, api_code=0) is False
+
+
 class _FakeResponse:
     def __init__(self, payload: dict, status_code: int = 200) -> None:
         self._payload = payload
