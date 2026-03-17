@@ -45,7 +45,7 @@ bash scripts/pack.sh --name onefetch.zip --output release
 ## 小红书评论（可选）
 
 ```bash
-ONEFETCH_XHS_COOKIE='...' \
+bash scripts/setup_xhs_cookie.sh
 ONEFETCH_XHS_COMMENT_MODE='state+api' \
-bash scripts/run_ingest.sh "https://www.xiaohongshu.com/explore/..."
+  bash scripts/run_ingest.sh "https://www.xiaohongshu.com/explore/..."
 ```

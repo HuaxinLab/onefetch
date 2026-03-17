@@ -37,6 +37,7 @@ bash scripts/run_ingest.sh --store "https://example.com"
 ```bash
 bash scripts/run_ingest.sh --list-crawlers
 bash scripts/run_ingest.sh --present "https://example.com"
+bash scripts/setup_xhs_cookie.sh
 bash scripts/run_ingest.sh "https://example.com" --report-md "./reports/latest-run.md"
 bash scripts/clean.sh
 bash scripts/pack.sh --clean-before

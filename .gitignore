@@ -9,6 +9,7 @@ data/
 reports/
 dist/
 release/
+.secrets/
 
 # macOS
 .DS_Store
