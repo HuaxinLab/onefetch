@@ -11,25 +11,13 @@ Supported sources:
 
 Default mode is fetch-only. Use `--store` only when users explicitly ask for persistence.
 
-## Skill-style layout
+## Purpose
 
-- `SKILL.md`
-- `scripts/`
-- `references/`
-- `onefetch/`
-- `tests/`
+- Provide a stable, unified web-reading capability for agents.
+- Return structured outputs for LLM summarization and decision-making.
+- Keep default behavior non-persistent (read first, store later).
 
-## Quick start
+## Documentation Entry
 
-```bash
-cd <project-root>
-bash scripts/bootstrap.sh
-bash scripts/doctor.sh
-bash scripts/run_ingest.sh "https://example.com"
-```
-
-Store artifacts only when needed:
-
-```bash
-bash scripts/run_ingest.sh --store "https://example.com"
-```
+- User Guide (start here): `references/USER_GUIDE.en.md`
+- Docs index: `references/INDEX.md`

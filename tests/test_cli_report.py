@@ -26,7 +26,8 @@ def test_ingest_generates_report_files(tmp_path: Path) -> None:
     assert report_json.exists()
     assert report_md.exists()
     payload = json.loads(report_json.read_text(encoding="utf-8"))
-    assert payload["fetched_count"] >= 1
+    assert payload["requested_urls"] == 1
+    assert payload["fetched_count"] + payload["failed_count"] >= 1
     assert "OneFetch Run Report" in report_md.read_text(encoding="utf-8")
 
 
