@@ -99,7 +99,7 @@ bash scripts/run_ingest.sh --store "https://example.com/article"
 bash scripts/run_ingest.sh --list-crawlers
 ONEFETCH_GENERIC_RENDER_MODE=browser bash scripts/run_ingest.sh "URL"
 bash scripts/clean.sh
-bash scripts/pack.sh --clean-before
+bash scripts/pack.sh
 bash scripts/pack.sh --name onefetch.zip --output release
 ```
 
@@ -113,3 +113,6 @@ Q2: 微信公众号内容不完整？
 
 Q3: 如何彻底重置本地环境？
 : `bash scripts/clean.sh --all`（会删除 `.venv`）。
+
+Q4: `clean.sh` 会删除我保存的内容吗？
+: 会先提示是否删除 `data/` 和 `reports/`。你可以选择跳过，或使用 `--keep-data` 强制保留。
