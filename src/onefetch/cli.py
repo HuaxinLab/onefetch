@@ -4,6 +4,10 @@ import argparse
 import asyncio
 import json
 import re
+import time
+from collections import Counter
+from datetime import datetime, timezone
+from pathlib import Path
 
 from onefetch.adapters import GenericHtmlAdapter, XiaohongshuAdapter
 from onefetch.config import OneFetchConfig
@@ -37,7 +41,83 @@ def build_parser() -> argparse.ArgumentParser:
     ingest.add_argument("--project-root", default=".", help="Project root (default: current directory)")
     ingest.add_argument("--json", action="store_true", help="Print JSON report")
     ingest.add_argument("--list-crawlers", action="store_true", help="List available adapters")
+    ingest.add_argument("--report-json", default="", help="Optional output path for run summary JSON")
+    ingest.add_argument("--report-md", default="", help="Optional output path for run summary Markdown")
     return parser
+
+
+def _build_run_summary(report, *, duration_sec: float) -> dict:
+    crawler_counter: Counter[str] = Counter()
+    comment_source_counter: Counter[str] = Counter()
+    risk_counter = 0
+    comment_total = 0
+
+    for result in report.results:
+        crawler_counter[result.crawler_id] += 1
+        if result.status != "stored" or not result.feed_path:
+            continue
+        feed_path = Path(result.feed_path)
+        if not feed_path.exists():
+            continue
+        try:
+            feed = json.loads(feed_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+
+        comment_total += len(feed.get("comments") or [])
+        cf = (feed.get("metadata") or {}).get("comment_fetch") or {}
+        source = cf.get("source") or "none"
+        comment_source_counter[source] += 1
+        api = cf.get("api") or {}
+        if api.get("reason") in {"risk_controlled", "risk_cooldown"}:
+            risk_counter += 1
+
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "duration_sec": round(duration_sec, 3),
+        "requested_urls": len(report.requested_urls),
+        "stored_count": report.stored_count,
+        "duplicate_count": report.duplicate_count,
+        "failed_count": report.failed_count,
+        "success_rate": round((report.stored_count / len(report.requested_urls)) if report.requested_urls else 0.0, 4),
+        "crawler_distribution": dict(crawler_counter),
+        "comment_total": comment_total,
+        "comment_source_distribution": dict(comment_source_counter),
+        "risk_controlled_count": risk_counter,
+    }
+
+
+def _write_report_files(summary: dict, *, json_path: str, md_path: str) -> None:
+    if json_path:
+        path = Path(json_path).expanduser()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    if md_path:
+        path = Path(md_path).expanduser()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        lines = [
+            "# OneFetch Run Report",
+            "",
+            f"- Generated At: {summary['generated_at']}",
+            f"- Duration: {summary['duration_sec']} sec",
+            f"- Requested URLs: {summary['requested_urls']}",
+            f"- Stored: {summary['stored_count']}",
+            f"- Duplicates: {summary['duplicate_count']}",
+            f"- Failed: {summary['failed_count']}",
+            f"- Success Rate: {summary['success_rate']}",
+            f"- Total Comments Captured: {summary['comment_total']}",
+            f"- Risk Controlled Count: {summary['risk_controlled_count']}",
+            "",
+            "## Crawler Distribution",
+            "",
+        ]
+        for key, value in summary.get("crawler_distribution", {}).items():
+            lines.append(f"- {key}: {value}")
+        lines.extend(["", "## Comment Source Distribution", ""])
+        for key, value in summary.get("comment_source_distribution", {}).items():
+            lines.append(f"- {key}: {value}")
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 async def run_ingest(args: argparse.Namespace) -> int:
@@ -57,7 +137,13 @@ async def run_ingest(args: argparse.Namespace) -> int:
     config = OneFetchConfig.from_project_root(args.project_root)
     storage = StorageService(config.paths())
     pipeline = IngestionPipeline(router=router, storage=storage)
+
+    start = time.monotonic()
     report = await pipeline.ingest_urls(urls, forced_adapter=args.crawler or None)
+    duration = time.monotonic() - start
+
+    summary = _build_run_summary(report, duration_sec=duration)
+    _write_report_files(summary, json_path=args.report_json, md_path=args.report_md)
 
     if args.json:
         print(report.model_dump_json(indent=2))
@@ -78,6 +164,11 @@ async def run_ingest(args: argparse.Namespace) -> int:
             print(f"  feed={result.feed_path}")
         if result.note_path:
             print(f"  note={result.note_path}")
+
+    if args.report_json:
+        print(f"  report_json={Path(args.report_json).expanduser()}")
+    if args.report_md:
+        print(f"  report_md={Path(args.report_md).expanduser()}")
     return 0
 
 

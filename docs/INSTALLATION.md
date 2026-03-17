@@ -36,6 +36,14 @@ onefetch ingest --help
 PYTHONPATH=src python3 -m pytest -q
 ```
 
+Generate run reports:
+
+```bash
+onefetch ingest "https://example.com" \
+  --report-json ./reports/latest-run.json \
+  --report-md ./reports/latest-run.md
+```
+
 If you hit local TLS certificate issues in development environments, you can temporarily run with:
 
 ```bash
