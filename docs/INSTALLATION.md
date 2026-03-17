@@ -74,6 +74,13 @@ export ONEFETCH_XHS_COMMENT_MODE='state+api+dom'
 export ONEFETCH_XHS_COMMENT_MODE='off'
 ```
 
+Comment pagination controls (for logged-in API fetching):
+
+```bash
+export ONEFETCH_XHS_COMMENT_MAX_PAGES=3
+export ONEFETCH_XHS_COMMENT_MAX_ITEMS=50
+```
+
 For DOM fallback, install browser support first:
 
 ```bash

@@ -287,51 +287,86 @@ class XiaohongshuAdapter(BaseAdapter):
         cookie = os.getenv("ONEFETCH_XHS_COOKIE", "").strip()
         if not cookie:
             return [], {"status": "skipped", "reason": "missing_cookie"}
-
-        url = (
-            "https://edith.xiaohongshu.com/api/sns/web/v2/comment/page"
-            f"?note_id={note_id}&cursor=&top_comment_id=&image_formats=jpg,webp,avif"
-        )
+        max_pages = self._env_int("ONEFETCH_XHS_COMMENT_MAX_PAGES", default=3, min_value=1, max_value=20)
+        max_items = self._env_int("ONEFETCH_XHS_COMMENT_MAX_ITEMS", default=50, min_value=1, max_value=500)
         headers = {
             "User-Agent": "Mozilla/5.0 (compatible; OneFetch/0.1)",
             "Accept": "application/json, text/plain, */*",
             "Referer": canonical_url,
             "Cookie": cookie,
         }
+        parsed: list[FeedComment] = []
+        cursor = ""
+        pages_fetched = 0
+        has_more = False
+        endpoint = "https://edith.xiaohongshu.com/api/sns/web/v2/comment/page"
+        seen: set[tuple[str | None, str]] = set()
 
         try:
             async with create_async_client(timeout=20, follow_redirects=True, headers=headers) as client:
-                response = await client.get(url)
-            if response.status_code != 200:
-                return [], {"status": "failed", "reason": "http_error", "http_status": response.status_code}
-            payload = response.json()
+                for _ in range(max_pages):
+                    url = (
+                        f"{endpoint}?note_id={note_id}&cursor={cursor}&top_comment_id=&image_formats=jpg,webp,avif"
+                    )
+                    response = await client.get(url)
+                    pages_fetched += 1
+                    if response.status_code != 200:
+                        return parsed, {
+                            "status": "failed",
+                            "reason": "http_error",
+                            "http_status": response.status_code,
+                            "pages_fetched": pages_fetched,
+                            "count": len(parsed),
+                        }
+                    payload = response.json()
+                    if not payload.get("success"):
+                        return parsed, {
+                            "status": "failed",
+                            "reason": "api_error",
+                            "code": payload.get("code"),
+                            "msg": payload.get("msg", ""),
+                            "pages_fetched": pages_fetched,
+                            "count": len(parsed),
+                        }
+
+                    data = payload.get("data") or {}
+                    for item in data.get("comments") or []:
+                        if not isinstance(item, dict):
+                            continue
+                        text = (item.get("content") or "").strip()
+                        if not text:
+                            continue
+                        user = item.get("user_info") or item.get("user_info_v2") or item.get("user") or {}
+                        author = user.get("nickname")
+                        key = (author, text)
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        parsed.append(FeedComment(author=author, text=text))
+                        if len(parsed) >= max_items:
+                            return parsed, {
+                                "status": "ok",
+                                "count": len(parsed),
+                                "has_more": bool(data.get("has_more")),
+                                "cursor": data.get("cursor", ""),
+                                "pages_fetched": pages_fetched,
+                                "limit_hit": True,
+                            }
+
+                    has_more = bool(data.get("has_more"))
+                    cursor = str(data.get("cursor") or "")
+                    if not has_more or not cursor:
+                        break
         except Exception as exc:
-            return [], {"status": "failed", "reason": "request_error", "error": str(exc)}
-
-        if not payload.get("success"):
-            return [], {
-                "status": "failed",
-                "reason": "api_error",
-                "code": payload.get("code"),
-                "msg": payload.get("msg", ""),
-            }
-
-        parsed: list[FeedComment] = []
-        data = payload.get("data") or {}
-        for item in data.get("comments") or []:
-            if not isinstance(item, dict):
-                continue
-            text = (item.get("content") or "").strip()
-            if not text:
-                continue
-            user = item.get("user_info") or item.get("user_info_v2") or item.get("user") or {}
-            parsed.append(FeedComment(author=user.get("nickname"), text=text))
+            return parsed, {"status": "failed", "reason": "request_error", "error": str(exc), "pages_fetched": pages_fetched}
 
         return parsed, {
             "status": "ok",
             "count": len(parsed),
-            "has_more": bool(data.get("has_more")),
-            "cursor": data.get("cursor", ""),
+            "has_more": has_more,
+            "cursor": cursor,
+            "pages_fetched": pages_fetched,
+            "limit_hit": False,
         }
 
     async def _fetch_comments_dom(self, *, final_url: str) -> tuple[list[FeedComment], dict]:
@@ -470,6 +505,17 @@ class XiaohongshuAdapter(BaseAdapter):
             "status": "ok" if comment_records else "empty",
             "count": len(comment_records),
         }
+
+    @staticmethod
+    def _env_int(name: str, *, default: int, min_value: int, max_value: int) -> int:
+        raw = os.getenv(name, "").strip()
+        if not raw:
+            return default
+        try:
+            value = int(raw)
+        except ValueError:
+            return default
+        return max(min_value, min(max_value, value))
 
     @staticmethod
     def _extract_balanced_object(text: str, start: int) -> str | None:
