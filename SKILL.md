@@ -15,19 +15,24 @@ argument-hint: [url-or-free-text]
 
 ## Agent 执行规范
 
-1. 默认使用 `scripts/run_ingest.sh --present --from-cache "URL"`，优先复用缓存，减少重复抓取。
-2. 用户明确要求“最新/重新抓取/刷新”时，不加 `--from-cache`，执行实时抓取。
-3. 默认保持临时缓存写入（`--cache-temp`），便于后续深入分析/翻译复用全文。
-4. 仅在用户明确要求保存/归档时使用 `--store`。
-5. 模型输出默认读取 `reports/llm_output.json` 并回填校验；仅在路径不同的情况下才使用 `--llm-output-file <path>`。
-6. 若 `llm_outputs_state=fallback`，后续保存/归档前应基于 `full_body` 重新生成结构化输出，避免沿用失效结果。
-7. 小红书评论默认可选；仅在用户需要评论时启用 `ONEFETCH_XHS_COMMENT_MODE='state+api'`。
-8. 若用户未配置评论 Cookie，agent 需引导用户完成插件导出并执行 `bash scripts/setup_xhs_cookie.sh` 粘贴一次。
-9. 报错时按可恢复性处理：可重试错误先重试一次，再给用户建议。
+1. 首次使用或环境异常时，先执行 `bash scripts/bootstrap.sh` 和 `bash scripts/doctor.sh` 完成依赖安装与检查。
+2. 默认使用 `scripts/run_ingest.sh --present --from-cache "URL"`，优先复用缓存，减少重复抓取。
+3. 用户明确要求“最新/重新抓取/刷新”时，不加 `--from-cache`，执行实时抓取。
+4. 默认保持临时缓存写入（`--cache-temp`），便于后续深入分析/翻译复用全文。
+5. 仅在用户明确要求保存/归档时使用 `--store`。
+6. 模型输出默认读取 `reports/llm_output.json` 并回填校验；仅在路径不同的情况下才使用 `--llm-output-file <path>`。
+7. 若 `llm_outputs_state=fallback`，后续保存/归档前应基于 `full_body` 重新生成结构化输出，避免沿用失效结果。
+8. 小红书评论默认可选；仅在用户需要评论时启用 `ONEFETCH_XHS_COMMENT_MODE='state+api'`。
+9. 若用户未配置评论 Cookie，agent 需引导用户完成插件导出并执行 `bash scripts/setup_xhs_cookie.sh` 粘贴一次。
+10. 报错时按可恢复性处理：可重试错误先重试一次，再给用户建议。
 
 ## Agent 常用命令
 
 ```bash
+# 首次初始化/修复环境
+bash scripts/bootstrap.sh
+bash scripts/doctor.sh
+
 # 默认读取（优先缓存，不存储）
 bash scripts/run_ingest.sh --present --from-cache "https://example.com/article"
 
