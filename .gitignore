@@ -6,6 +6,9 @@ __pycache__/
 
 # Runtime data
 data/
+reports/
+dist/
+release/
 
 # macOS
 .DS_Store
