@@ -61,6 +61,26 @@ export ONEFETCH_XHS_COOKIE='your_cookie_here'
 onefetch ingest "https://www.xiaohongshu.com/explore/..."
 ```
 
+Comment fetch mode:
+
+```bash
+# default
+export ONEFETCH_XHS_COMMENT_MODE='state+api'
+
+# include Playwright DOM fallback
+export ONEFETCH_XHS_COMMENT_MODE='state+api+dom'
+
+# disable comment fetch entirely
+export ONEFETCH_XHS_COMMENT_MODE='off'
+```
+
+For DOM fallback, install browser support first:
+
+```bash
+pip install -e ".[browser]"
+playwright install chromium
+```
+
 ## Skill installation (later phase)
 
 ```bash
