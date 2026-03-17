@@ -83,7 +83,13 @@ async def test_fetch_comments_pagination_and_dedup(monkeypatch: pytest.MonkeyPat
             "success": True,
             "data": {
                 "comments": [
-                    {"content": "A", "user_info": {"nickname": "u1"}},
+                    {
+                        "content": "A",
+                        "user_info": {"nickname": "u1"},
+                        "sub_comments": [
+                            {"content": "A-1", "user_info": {"nickname": "u1r"}},
+                        ],
+                    },
                     {"content": "B", "user_info": {"nickname": "u2"}},
                 ],
                 "has_more": True,
@@ -115,8 +121,8 @@ async def test_fetch_comments_pagination_and_dedup(monkeypatch: pytest.MonkeyPat
         canonical_url="https://www.xiaohongshu.com/explore/68075b1d000000001b03c4f0",
     )
 
-    assert [item.text for item in comments] == ["A", "B", "C"]
+    assert [item.text for item in comments] == ["A", "↳ A-1", "B", "C"]
     assert status["status"] == "ok"
-    assert status["count"] == 3
+    assert status["count"] == 4
     assert status["pages_fetched"] == 2
     assert status["has_more"] is False

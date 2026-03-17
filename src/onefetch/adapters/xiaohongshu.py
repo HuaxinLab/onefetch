@@ -333,25 +333,22 @@ class XiaohongshuAdapter(BaseAdapter):
                     for item in data.get("comments") or []:
                         if not isinstance(item, dict):
                             continue
-                        text = (item.get("content") or "").strip()
-                        if not text:
-                            continue
-                        user = item.get("user_info") or item.get("user_info_v2") or item.get("user") or {}
-                        author = user.get("nickname")
-                        key = (author, text)
-                        if key in seen:
-                            continue
-                        seen.add(key)
-                        parsed.append(FeedComment(author=author, text=text))
-                        if len(parsed) >= max_items:
-                            return parsed, {
-                                "status": "ok",
-                                "count": len(parsed),
-                                "has_more": bool(data.get("has_more")),
-                                "cursor": data.get("cursor", ""),
-                                "pages_fetched": pages_fetched,
-                                "limit_hit": True,
-                            }
+                        flattened = self._flatten_comment_with_replies(item)
+                        for author, text in flattened:
+                            key = (author, text)
+                            if key in seen:
+                                continue
+                            seen.add(key)
+                            parsed.append(FeedComment(author=author, text=text))
+                            if len(parsed) >= max_items:
+                                return parsed, {
+                                    "status": "ok",
+                                    "count": len(parsed),
+                                    "has_more": bool(data.get("has_more")),
+                                    "cursor": data.get("cursor", ""),
+                                    "pages_fetched": pages_fetched,
+                                    "limit_hit": True,
+                                }
 
                     has_more = bool(data.get("has_more"))
                     cursor = str(data.get("cursor") or "")
@@ -368,6 +365,38 @@ class XiaohongshuAdapter(BaseAdapter):
             "pages_fetched": pages_fetched,
             "limit_hit": False,
         }
+
+    @staticmethod
+    def _flatten_comment_with_replies(item: dict) -> list[tuple[str | None, str]]:
+        entries: list[tuple[str | None, str]] = []
+
+        root_text = (item.get("content") or item.get("text") or "").strip()
+        root_user = item.get("user_info") or item.get("user_info_v2") or item.get("user") or {}
+        root_author = root_user.get("nickname")
+        if root_text:
+            entries.append((root_author, root_text))
+
+        reply_lists = [
+            item.get("sub_comments"),
+            item.get("sub_comment_list"),
+            item.get("subCommentList"),
+            item.get("replies"),
+            item.get("reply_list"),
+        ]
+        for reply_list in reply_lists:
+            if not isinstance(reply_list, list):
+                continue
+            for reply in reply_list:
+                if not isinstance(reply, dict):
+                    continue
+                reply_text = (reply.get("content") or reply.get("text") or "").strip()
+                if not reply_text:
+                    continue
+                reply_user = reply.get("user_info") or reply.get("user_info_v2") or reply.get("user") or {}
+                reply_author = reply_user.get("nickname")
+                # Flatten threaded reply while preserving "is a reply" signal.
+                entries.append((reply_author, f"↳ {reply_text}"))
+        return entries
 
     async def _fetch_comments_dom(self, *, final_url: str) -> tuple[list[FeedComment], dict]:
         try:

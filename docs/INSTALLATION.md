@@ -93,6 +93,7 @@ onefetch ingest "https://www.xiaohongshu.com/explore/..."
 Expected result in feed metadata:
 - `metadata.comment_fetch.source = api`
 - `metadata.comment_fetch.api.count > 0`
+- Reply comments are flattened with `↳ ` prefix when API provides nested replies.
 
 For DOM fallback, install browser support first:
 
