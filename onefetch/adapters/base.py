@@ -36,6 +36,9 @@ def node_to_text(node: lxml_html.HtmlElement, *, image_placeholders: bool = Fals
                 el.tail = "\n"
         if image_placeholders and el.tag == "img":
             src = el.get("data-src") or el.get("src") or ""
+            # 补全协议相对 URL（// 开头）
+            if src.startswith("//"):
+                src = "https:" + src
             if src and src.startswith("http") and "svg+xml" not in src and "1px" not in src:
                 img_index += 1
                 images.append(src)
