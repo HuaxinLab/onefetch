@@ -36,8 +36,8 @@ if [[ $# -eq 0 ]]; then
   echo "  run_ingest.sh \"https://example.com\""
   echo "  run_ingest.sh --store \"https://example.com\""
   echo "  run_ingest.sh --present \"https://example.com\""
-  echo "  setup_xhs_cookie.sh then run xiaohongshu comment mode"
-  echo "  setup_zhihu_cookie.sh then run zhihu zhuanlan url"
+  echo "  setup_cookie.sh xhs   then run xiaohongshu comment mode"
+  echo "  setup_cookie.sh zhihu then run zhihu zhuanlan url"
   exit 2
 fi
 

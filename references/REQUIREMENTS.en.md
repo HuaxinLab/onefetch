@@ -30,13 +30,13 @@ Core positioning:
 
 1. Default fetch-only mode (no writes to `data/`).
 2. Persist artifacts only with explicit `--store`.
-3. Predictable artifact layout (`data/raw|feed|notes`).
+3. Predictable artifact layout (`data/feed|notes`).
 
 ### 2.4 Xiaohongshu Comments
 
 1. Body extraction should still work without cookie.
 2. Comment extraction should support cookie-driven mode.
-3. One-time setup script must exist (`setup_xhs_cookie.sh`).
+3. One-time setup script must exist (`setup_cookie.sh`).
 
 ### 2.5 Reporting and Observability
 

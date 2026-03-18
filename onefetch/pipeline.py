@@ -4,20 +4,16 @@ import httpx
 
 from onefetch.models import BatchIngestReport, IngestResult
 from onefetch.router import Router
-from onefetch.storage import StorageService
 
 
 class IngestionPipeline:
-    def __init__(self, router: Router, storage: StorageService | None = None) -> None:
+    def __init__(self, router: Router) -> None:
         self._router = router
-        self._storage = storage
 
     async def ingest_urls(
         self,
         urls: list[str],
         forced_adapter: str | None = None,
-        *,
-        store: bool = False,
     ) -> BatchIngestReport:
         unique_urls = list(dict.fromkeys(urls))
         report = BatchIngestReport(requested_urls=unique_urls)
@@ -33,55 +29,21 @@ class IngestionPipeline:
                 api_reason = (comment_fetch.get("api") or {}).get("reason")
                 risk_controlled = api_reason in {"risk_controlled", "risk_cooldown"}
 
-                common_result = {
-                    "source_url": source_url,
-                    "canonical_url": output.feed.canonical_url,
-                    "crawler_id": adapter.id,
-                    "content_hash": output.feed.content_hash,
-                    "title": output.feed.title,
-                    "comment_count": len(output.feed.comments),
-                    "comment_source": comment_source,
-                    "body_preview": self._preview(output.feed.body, limit=280),
-                    "body_excerpt": self._preview(output.feed.body, limit=1600),
-                    "body_full": (output.feed.body or "").strip(),
-                    "risk_controlled": risk_controlled,
-                }
-
-                if not store:
-                    report.fetched_count += 1
-                    report.results.append(IngestResult(status="fetched", **common_result))
-                    continue
-
-                if self._storage is None:
-                    raise RuntimeError("Storage is not initialized but store=True was requested.")
-
-                duplicate = self._storage.find_duplicate(output.feed.canonical_url, output.feed.content_hash)
-                if duplicate:
-                    report.duplicate_count += 1
-                    report.results.append(
-                        IngestResult(
-                            status="duplicate",
-                            raw_path=duplicate.get("raw_path", ""),
-                            feed_path=duplicate.get("feed_path", ""),
-                            note_path=duplicate.get("note_path", ""),
-                            **common_result,
-                        )
-                    )
-                    continue
-
-                raw_path = self._storage.save_capture(output.capture)
-                feed_path = self._storage.save_feed(output.feed)
-                note_path = self._storage.save_note(output.feed)
-                self._storage.append_catalog(output.feed, raw_path, feed_path, note_path)
-
-                report.stored_count += 1
+                report.fetched_count += 1
                 report.results.append(
                     IngestResult(
-                        status="stored",
-                        raw_path=raw_path,
-                        feed_path=feed_path,
-                        note_path=note_path,
-                        **common_result,
+                        source_url=source_url,
+                        canonical_url=output.feed.canonical_url,
+                        crawler_id=adapter.id,
+                        status="fetched",
+                        content_hash=output.feed.content_hash,
+                        title=output.feed.title,
+                        comment_count=len(output.feed.comments),
+                        comment_source=comment_source,
+                        body_preview=self._preview(output.feed.body, limit=280),
+                        body_excerpt=self._preview(output.feed.body, limit=1600),
+                        body_full=(output.feed.body or "").strip(),
+                        risk_controlled=risk_controlled,
                     )
                 )
             except Exception as exc:

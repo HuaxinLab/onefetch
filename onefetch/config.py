@@ -10,7 +10,6 @@ class Paths:
     data_dir: Path
     reports_dir: Path
     temp_cache_dir: Path
-    raw_dir: Path
     feed_dir: Path
     notes_dir: Path
     catalog_file: Path
@@ -34,7 +33,6 @@ class OneFetchConfig:
             data_dir=data_dir,
             reports_dir=reports_dir,
             temp_cache_dir=reports_dir / "cache",
-            raw_dir=data_dir / "raw",
             feed_dir=data_dir / "feed",
             notes_dir=data_dir / "notes",
             catalog_file=data_dir / "catalog.jsonl",

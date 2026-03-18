@@ -77,10 +77,9 @@ Principle:
 ### 5.2 Store mode (`--store`)
 
 Writes:
-- `data/raw/*.json`
-- `data/feed/*.json`
-- `data/notes/*.md`
-- `data/catalog.jsonl`
+- `data/feed/*.json` (structured data including LLM outputs)
+- `data/notes/*.md` (human-readable archive with summary/key points/tags/body)
+- `data/catalog.jsonl` (index for dedup and retrieval)
 
 ### 5.3 Dedup
 

@@ -77,10 +77,9 @@ OneFetch/
 ### 5.2 存储模式（--store）
 
 写入：
-- `data/raw/*.json`
-- `data/feed/*.json`
-- `data/notes/*.md`
-- `data/catalog.jsonl`
+- `data/feed/*.json`（结构化数据，含 LLM 输出）
+- `data/notes/*.md`（人可读归档，含摘要/要点/标签/正文）
+- `data/catalog.jsonl`（索引，用于查重和检索）
 
 ### 5.3 去重策略
 

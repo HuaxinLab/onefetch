@@ -42,11 +42,16 @@ agent 不需要手动选择适配器，router 根据 URL 自动路由。
 5. 默认保持临时缓存写入（`--cache-temp`），便于后续深入分析 / 翻译复用全文。
 6. 仅在用户明确要求保存 / 归档时使用 `--store`。
 
-### 模型输出回填
+### LLM 输出回填
 
-7. 模型输出默认读取 `reports/llm_output.json` 并回填校验；仅在路径不同的情况下才使用 `--llm-output-file <path>`。
-8. 若 `llm_outputs_state=fallback`，后续保存 / 归档前应基于 `full_body` 重新生成结构化输出，避免沿用失效结果。
-9. 若最终走规则保底保存，agent 需用通俗语言提醒：正文已保存，但摘要 / 要点 / 标签为自动整理结果，可能不够准确；用户可稍后要求"重新整理"再覆盖。
+7. agent 用 LLM 整理完内容后（生成摘要、要点、标签），**立刻调用 `cache-backfill` 写入缓存**，不要等下次运行：
+   ```bash
+   .venv/bin/python -m onefetch.cli cache-backfill "URL" \
+     --project-root . \
+     --json-data '{"summary":"...","key_points":["...","..."],"tags":["..."]}'
+   ```
+   这样缓存第一时间就是完整的，后续任何操作（翻译、保存、再次查看）都能直接复用。
+8. 若 `--store` 时 `llm_outputs_state` 为 `fallback` 或 `missing`，onefetch 会自动用规则从正文重新生成。agent 需用通俗语言提醒：正文已保存，但摘要 / 要点 / 标签为自动整理结果，可能不够准确；用户可稍后要求"重新整理"再覆盖。
 
 ### 平台特殊处理
 
@@ -206,9 +211,9 @@ bash scripts/run_ingest.sh --present --refresh "https://example.com/article"
 # 用户明确要求保存
 bash scripts/run_ingest.sh --store --from-cache "URL"
 
-# 模型输出路径非默认时，手动指定
-bash scripts/run_ingest.sh --present --from-cache \
-  --llm-output-file /path/to/llm_output.json "URL"
+# LLM 整理完内容后，立刻回填到缓存
+.venv/bin/python -m onefetch.cli cache-backfill "URL" \
+  --json-data '{"summary":"...","key_points":["..."],"tags":["..."]}'
 
 # 查看可用适配器
 bash scripts/run_ingest.sh --list-crawlers

@@ -12,10 +12,10 @@
 - 支持 `--refresh` 强制实时抓取（跳过缓存读取）
 - 显式 `--store` 持久化
 - 临时缓存上限控制（`--cache-max-items`）
-- 模型输出默认回填（`reports/llm_output.json`，可用 `--llm-output-file` 覆盖）
+- LLM 输出通过 `cache-backfill` 命令立刻回填到缓存
 - `--store` 且结构化结果失效时，优先通过 `ONEFETCH_LLM_REGEN_CMD` 执行真实 LLM 重算，失败再规则兜底
 - cookie 一次配置与自动加载
-- 知乎 cookie 一次配置脚本（`setup_zhihu_cookie.sh`）
+- cookie 一次配置脚本（`setup_cookie.sh`）
 - 打包与清理脚本
 
 ## 2. 开发工作流
@@ -106,13 +106,13 @@ Plugin 运维命令：
 ### 小红书评论 Cookie
 
 ```bash
-bash scripts/setup_xhs_cookie.sh
+bash scripts/setup_cookie.sh xhs
 ```
 
 ### 知乎 Cookie（专栏 `risk.blocked` 时）
 
 ```bash
-bash scripts/setup_zhihu_cookie.sh
+bash scripts/setup_cookie.sh zhihu
 ```
 
 说明：

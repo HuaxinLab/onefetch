@@ -17,7 +17,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 - Default agent strategy documented as cache-first read (`--present --from-cache`).
-- Default LLM output backfill path set to `reports/llm_output.json` (override optional).
+- LLM output backfill via `cache-backfill` command (replaces `reports/llm_output.json`).
 - Documentation structure simplified: user entry consolidated in README; script details moved to engineering docs.
 
 ### Removed

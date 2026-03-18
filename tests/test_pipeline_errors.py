@@ -16,7 +16,7 @@ class TimeoutAdapter(BaseAdapter):
 
 
 async def test_pipeline_classifies_timeout_error() -> None:
-    pipeline = IngestionPipeline(router=Router([TimeoutAdapter()]), storage=None)
+    pipeline = IngestionPipeline(router=Router([TimeoutAdapter()]))
     report = await pipeline.ingest_urls(["https://example.com/a"])
 
     assert report.failed_count == 1

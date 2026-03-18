@@ -41,36 +41,73 @@ def test_ingest_present_mode_outputs_block(tmp_path, capsys) -> None:
     assert "### Item 1" in out
 
 
-def test_ingest_present_attaches_llm_outputs_from_file(tmp_path, capsys, monkeypatch) -> None:
+def test_cache_backfill_attaches_llm_outputs(tmp_path, capsys, monkeypatch) -> None:
+    FakeAdapter.calls = 0
     monkeypatch.setattr(cli, "create_default_adapters", lambda: [FakeAdapter()])
-    llm_file = tmp_path / "llm_output.json"
-    llm_file.write_text(
-        '{"summary":"hello","key_points":["a","b"],"tags":["x","y"]}',
-        encoding="utf-8",
-    )
 
-    exit_code = cli.main(
-        [
-            "ingest",
-            "https://example.com",
-            "--present",
-            "--project-root",
-            str(tmp_path),
-            "--llm-output-file",
-            str(llm_file),
-        ]
-    )
+    # Step 1: fetch and cache
+    cli.main(["ingest", "https://example.com", "--project-root", str(tmp_path)])
+    capsys.readouterr()
+
+    # Step 2: backfill LLM outputs
+    backfill_exit = cli.main([
+        "cache-backfill", "https://example.com",
+        "--project-root", str(tmp_path),
+        "--json-data", '{"summary":"hello","key_points":["a","b"],"tags":["x","y"]}',
+    ])
+    assert backfill_exit == 0
+
+    # Step 3: read from cache, verify LLM outputs attached
+    exit_code = cli.main([
+        "ingest", "https://example.com",
+        "--project-root", str(tmp_path),
+        "--from-cache", "--present",
+    ])
     out = capsys.readouterr().out
 
     assert exit_code == 0
+    assert FakeAdapter.calls == 1  # no second crawl
     assert "- llm_summary: hello" in out
     assert "- llm_outputs_state: ok" in out
     assert "- llm_key_points:" in out
     assert "- llm_tags: x, y" in out
-    assert "cache=" in out
-    cache_dir = tmp_path / "reports" / "cache"
-    assert cache_dir.exists()
-    assert len(list(cache_dir.glob("*.json"))) >= 1
+
+
+def test_cache_backfill_marks_fallback_on_invalid_json(tmp_path, capsys, monkeypatch) -> None:
+    FakeAdapter.calls = 0
+    monkeypatch.setattr(cli, "create_default_adapters", lambda: [FakeAdapter()])
+
+    cli.main(["ingest", "https://example.com", "--project-root", str(tmp_path)])
+    capsys.readouterr()
+
+    backfill_exit = cli.main([
+        "cache-backfill", "https://example.com",
+        "--project-root", str(tmp_path),
+        "--json-data", "summary: hello\nkey_points: [a,b]",
+    ])
+    assert backfill_exit == 0
+
+    exit_code = cli.main([
+        "ingest", "https://example.com",
+        "--project-root", str(tmp_path),
+        "--from-cache", "--present",
+    ])
+    out = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "- llm_outputs_state: fallback" in out
+    assert "- llm_output_validation_error:" in out
+
+
+def test_cache_backfill_fails_for_unknown_url(tmp_path, capsys) -> None:
+    exit_code = cli.main([
+        "cache-backfill", "https://unknown.example.com",
+        "--project-root", str(tmp_path),
+        "--json-data", '{"summary":"test"}',
+    ])
+    assert exit_code == 1
+    out = capsys.readouterr().out
+    assert "no cache entry found" in out
 
 
 def test_ingest_from_cache_skips_second_crawl(tmp_path, monkeypatch) -> None:
@@ -130,96 +167,27 @@ def test_ingest_refresh_bypasses_cache_even_with_from_cache(tmp_path, monkeypatc
     assert FakeAdapter.calls == 2
 
 
-def test_ingest_present_reads_default_llm_output_file(tmp_path, capsys, monkeypatch) -> None:
-    monkeypatch.setattr(cli, "create_default_adapters", lambda: [FakeAdapter()])
-    reports_dir = tmp_path / "reports"
-    reports_dir.mkdir(parents=True, exist_ok=True)
-    (reports_dir / "llm_output.json").write_text(
-        '{"summary":"default summary","key_points":["k1"],"tags":["t1"]}',
-        encoding="utf-8",
-    )
-
-    exit_code = cli.main(
-        [
-            "ingest",
-            "https://example.com",
-            "--project-root",
-            str(tmp_path),
-            "--present",
-        ]
-    )
-    out = capsys.readouterr().out
-
-    assert exit_code == 0
-    assert "- llm_summary: default summary" in out
-    assert "- llm_outputs_state: ok" in out
-    assert "- llm_tags: t1" in out
-
-
-def test_ingest_present_marks_fallback_state_on_invalid_llm_output(tmp_path, capsys, monkeypatch) -> None:
-    monkeypatch.setattr(cli, "create_default_adapters", lambda: [FakeAdapter()])
-    reports_dir = tmp_path / "reports"
-    reports_dir.mkdir(parents=True, exist_ok=True)
-    (reports_dir / "llm_output.json").write_text(
-        "summary: hello\nkey_points: [a,b]",
-        encoding="utf-8",
-    )
-
-    exit_code = cli.main(
-        [
-            "ingest",
-            "https://example.com",
-            "--project-root",
-            str(tmp_path),
-            "--present",
-        ]
-    )
-    out = capsys.readouterr().out
-
-    assert exit_code == 0
-    assert "- llm_outputs_state: fallback" in out
-    assert "- llm_output_validation_error:" in out
-
-
-def test_store_flow_regenerates_fallback_llm_outputs_from_full_body(tmp_path, capsys, monkeypatch) -> None:
+def test_store_flow_regenerates_llm_outputs_from_full_body(tmp_path, capsys, monkeypatch) -> None:
     FakeAdapter.calls = 0
     monkeypatch.setattr(cli, "create_default_adapters", lambda: [FakeAdapter()])
-    reports_dir = tmp_path / "reports"
-    reports_dir.mkdir(parents=True, exist_ok=True)
-    (reports_dir / "llm_output.json").write_text(
-        "summary: invalid\nkey_points: [x,y]",
-        encoding="utf-8",
-    )
 
+    # Fetch first (no LLM outputs — state will be "missing")
     first_exit = cli.main(
-        [
-            "ingest",
-            "https://example.com",
-            "--project-root",
-            str(tmp_path),
-            "--present",
-        ]
+        ["ingest", "https://example.com", "--project-root", str(tmp_path), "--present"]
     )
     assert first_exit == 0
     assert FakeAdapter.calls == 1
     capsys.readouterr()
 
+    # Store from cache — should regenerate LLM from rules since state is missing
     second_exit = cli.main(
-        [
-            "ingest",
-            "https://example.com",
-            "--project-root",
-            str(tmp_path),
-            "--from-cache",
-            "--store",
-            "--present",
-        ]
+        ["ingest", "https://example.com", "--project-root", str(tmp_path),
+         "--from-cache", "--store", "--present"]
     )
     out = capsys.readouterr().out
     assert second_exit == 0
     assert FakeAdapter.calls == 1
     assert "- llm_outputs_state: ok" in out
-    assert "llm_output_validation_error" not in out
     assert "正文内容已正常保存" in out
 
     cache_files = sorted((tmp_path / "reports" / "cache").glob("*.json"))
@@ -227,18 +195,11 @@ def test_store_flow_regenerates_fallback_llm_outputs_from_full_body(tmp_path, ca
     payload = json.loads(cache_files[-1].read_text(encoding="utf-8"))
     assert payload["llm_outputs_state"] == "ok"
     assert payload["llm_outputs"]["extras"]["regenerated_from_full_body"] is True
-    assert "user_notice" in payload["llm_outputs"]["extras"]
 
 
 def test_store_flow_prefers_llm_regeneration_when_command_available(tmp_path, capsys, monkeypatch) -> None:
     FakeAdapter.calls = 0
     monkeypatch.setattr(cli, "create_default_adapters", lambda: [FakeAdapter()])
-    reports_dir = tmp_path / "reports"
-    reports_dir.mkdir(parents=True, exist_ok=True)
-    (reports_dir / "llm_output.json").write_text(
-        "summary: invalid\nkey_points: [x,y]",
-        encoding="utf-8",
-    )
 
     async def fake_llm_regen_command(payload_json: str) -> tuple[int, str, str]:
         assert "full content" in payload_json
@@ -248,14 +209,8 @@ def test_store_flow_prefers_llm_regeneration_when_command_available(tmp_path, ca
     monkeypatch.setattr(cli, "_run_llm_regen_command", fake_llm_regen_command)
 
     exit_code = cli.main(
-        [
-            "ingest",
-            "https://example.com",
-            "--project-root",
-            str(tmp_path),
-            "--store",
-            "--present",
-        ]
+        ["ingest", "https://example.com", "--project-root", str(tmp_path),
+         "--store", "--present"]
     )
     out = capsys.readouterr().out
 
@@ -263,4 +218,3 @@ def test_store_flow_prefers_llm_regeneration_when_command_available(tmp_path, ca
     assert "- llm_summary: regen summary" in out
     assert "- llm_outputs_state: ok" in out
     assert "- llm_tags: regen" in out
-    assert "llm_output_validation_error" not in out

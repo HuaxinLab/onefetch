@@ -53,11 +53,6 @@ def build_parser() -> argparse.ArgumentParser:
     ingest.add_argument("--report-json", default="", help="Optional output path for run summary JSON")
     ingest.add_argument("--report-md", default="", help="Optional output path for run summary Markdown")
     ingest.add_argument(
-        "--llm-output-file",
-        default="",
-        help="Optional override path for raw LLM output (JSON/text). Default path: reports/llm_output.json",
-    )
-    ingest.add_argument(
         "--cache-temp",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -81,6 +76,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ingest.add_argument("--store", action="store_true", help="Persist artifacts to data/ and catalog")
     ingest.add_argument("--present", action="store_true", help="Print normalized presentation blocks for LLM summarization")
+
+    backfill = sub.add_parser("cache-backfill", help="Backfill LLM outputs into an existing cache entry")
+    backfill.add_argument("url", help="The URL whose cache entry to update")
+    backfill.add_argument("--json-data", default="", help='LLM outputs as JSON string: {"summary":"...","key_points":["..."],"tags":["..."]}')
+    backfill.add_argument("--project-root", default=".", help="Project root (default: current directory)")
 
     plugin = sub.add_parser("plugin", help="Run independent plugins")
     plugin_sub = plugin.add_subparsers(dest="plugin_command", required=True)
@@ -188,13 +188,6 @@ def _write_report_files(summary: dict, *, json_path: str, md_path: str) -> None:
                 lines.append(f"- {key}: {value}")
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-
-def _resolve_llm_output_path(args: argparse.Namespace, reports_dir: Path) -> Path | None:
-    if args.llm_output_file:
-        path = Path(args.llm_output_file).expanduser()
-        return path if path.exists() else None
-    default_path = reports_dir / "llm_output.json"
-    return default_path if default_path.exists() else None
 
 
 def _llm_outputs_state(parsed_output) -> str:
@@ -379,18 +372,14 @@ async def run_ingest(args: argparse.Namespace) -> int:
 
     config = OneFetchConfig.from_project_root(args.project_root)
     paths = config.paths()
-    storage = None
-    if args.store:
-        storage = StorageService(paths)
     cache_service = TempCacheService(paths, max_entries=args.cache_max_items) if args.cache_temp else None
-
-    pipeline = IngestionPipeline(router=router, storage=storage)
+    pipeline = IngestionPipeline(router=router)
 
     start = time.monotonic()
     report = BatchIngestReport(requested_urls=urls)
     pending_urls = urls
     cached_results_by_url: dict[str, IngestResult] = {}
-    cache_hit_urls: set[str] = set()
+    cache_hit_states: dict[str, str] = {}
     if args.from_cache and not args.refresh and cache_service is not None:
         pending_urls = []
         for source_url in urls:
@@ -400,10 +389,10 @@ async def run_ingest(args: argparse.Namespace) -> int:
                 continue
             cached.cache_path = "<cache-hit>"
             cached_results_by_url[source_url] = cached
-            cache_hit_urls.add(source_url)
+            cache_hit_states[source_url] = cached.llm_outputs_state
 
     if pending_urls:
-        fresh_report = await pipeline.ingest_urls(pending_urls, forced_adapter=args.crawler or None, store=args.store)
+        fresh_report = await pipeline.ingest_urls(pending_urls, forced_adapter=args.crawler or None)
         for result in fresh_report.results:
             cached_results_by_url[result.source_url] = result
 
@@ -411,30 +400,30 @@ async def run_ingest(args: argparse.Namespace) -> int:
     report.fetched_count, report.stored_count, report.duplicate_count, report.failed_count = _count_result_statuses(report)
     duration = time.monotonic() - start
 
-    llm_output_path = _resolve_llm_output_path(args, paths.reports_dir)
-    if llm_output_path is not None:
-        raw_output = llm_output_path.read_text(encoding="utf-8")
-        parsed_output = parse_and_validate_llm_outputs(raw_output)
-        parsed_state = _llm_outputs_state(parsed_output)
-        for result in report.results:
-            result.llm_outputs = parsed_output
-            result.llm_outputs_state = parsed_state
-
     if args.store:
         await _ensure_store_ready_llm_outputs(report)
 
+    # Update cache: touch if unchanged, save if modified
     if cache_service is not None:
         for result in report.results:
             if result.status == "failed":
                 continue
-            if result.source_url in cache_hit_urls and llm_output_path is None and not args.store:
+            original_state = cache_hit_states.get(result.source_url)
+            if original_state == "ok" and result.llm_outputs_state == "ok":
                 cache_service.touch_result(result.canonical_url, result.content_hash)
             else:
                 result.cache_path = cache_service.save_result(result)
 
-    # LLM output consumed — delete so it doesn't get stale-applied on next run
-    if llm_output_path is not None and llm_output_path.exists():
-        llm_output_path.unlink()
+    # Persist to data/ (after cache is up to date)
+    if args.store:
+        storage = StorageService(paths)
+        for result in report.results:
+            if result.status == "failed":
+                continue
+            feed_path, note_path = storage.store_result(result)
+            result.feed_path = feed_path
+            result.note_path = note_path
+            result.status = "stored" if feed_path else "duplicate"
 
     summary = _build_run_summary(report, duration_sec=duration)
     _write_report_files(summary, json_path=args.report_json, md_path=args.report_md)
@@ -464,8 +453,6 @@ async def run_ingest(args: argparse.Namespace) -> int:
         print(f"  comments={result.comment_count} source={result.comment_source}")
         if result.body_preview:
             print(f"  preview={result.body_preview}")
-        if result.raw_path:
-            print(f"  raw={result.raw_path}")
         if result.feed_path:
             print(f"  feed={result.feed_path}")
         if result.note_path:
@@ -612,12 +599,46 @@ def run_plugin(args: argparse.Namespace) -> int:
     return 2
 
 
+def run_cache_backfill(args: argparse.Namespace) -> int:
+    """Backfill LLM outputs into an existing cache entry for a URL."""
+    config = OneFetchConfig(project_root=Path(args.project_root).expanduser())
+    paths = config.paths()
+    cache_service = TempCacheService(paths)
+
+    cached = cache_service.load_latest_result(args.url)
+    if cached is None:
+        print(f"[cache-backfill] no cache entry found for: {args.url}")
+        return 1
+
+    json_data = args.json_data
+    if not json_data:
+        # Read from stdin
+        import sys
+        json_data = sys.stdin.read()
+
+    if not json_data.strip():
+        print("[cache-backfill] empty input, aborted")
+        return 1
+
+    parsed = parse_and_validate_llm_outputs(json_data)
+    state = _llm_outputs_state(parsed)
+
+    cached.llm_outputs = parsed
+    cached.llm_outputs_state = state
+    saved_path = cache_service.save_result(cached)
+    print(f"[cache-backfill] updated: {saved_path}")
+    print(f"[cache-backfill] llm_outputs_state: {state}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
     if args.command == "ingest":
         return asyncio.run(run_ingest(args))
+    if args.command == "cache-backfill":
+        return run_cache_backfill(args)
     if args.command == "plugin":
         return run_plugin(args)
 

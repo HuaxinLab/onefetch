@@ -12,7 +12,7 @@ Completed:
 - `--refresh` support for forced live crawl (bypass cache read)
 - explicit `--store` persistence
 - temp cache size control (`--cache-max-items`)
-- default LLM output backfill (`reports/llm_output.json`, overridable via `--llm-output-file`)
+- LLM output backfill via `cache-backfill` command (immediate write to cache)
 - in `--store` flow, invalid structured output is regenerated via real LLM through `ONEFETCH_LLM_REGEN_CMD` first, then heuristic fallback
 - one-time cookie setup and auto-load
 - plugin framework (`onefetch plugin list/run`)
