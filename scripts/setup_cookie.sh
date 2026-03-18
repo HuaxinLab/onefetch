@@ -32,13 +32,13 @@ if [[ ! -t 0 ]]; then
   # stdin is redirected (pipe / file)
   cookie_content="$(cat | tr -d '\r\n' | sed 's/^ *//; s/ *$//')"
 elif command -v pbpaste &>/dev/null; then
-  echo "Copy the cookie to clipboard, then press Enter."
-  printf '> '
+  echo "Copy the cookie to clipboard, then press Enter to confirm."
+  printf '[Enter] '
   IFS= read -r _
   cookie_content="$(pbpaste 2>/dev/null | tr -d '\r\n' | sed 's/^ *//; s/ *$//')"
 elif command -v xclip &>/dev/null; then
-  echo "Copy the cookie to clipboard, then press Enter."
-  printf '> '
+  echo "Copy the cookie to clipboard, then press Enter to confirm."
+  printf '[Enter] '
   IFS= read -r _
   cookie_content="$(xclip -selection clipboard -o 2>/dev/null | tr -d '\r\n' | sed 's/^ *//; s/ *$//')"
 else
