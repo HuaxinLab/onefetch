@@ -71,6 +71,18 @@ After installation, tell the agent:
 **Scenario 6: Zhihu anti-bot block**
 > The agent will prompt you to configure a Zhihu Cookie. Follow the instructions once.
 
+### Cookie Setup
+
+Some platforms (Zhihu, Xiaohongshu comments) require a one-time Cookie configuration:
+
+1. Log in to the platform in your browser
+2. Get the Cookie (choose one method):
+   - **F12 DevTools**: Network tab → click any request → Headers → copy the `Cookie:` value
+   - **Browser extension**: Cookie-Editor (export as Header String), Get cookies.txt, etc.
+3. Copy the Cookie, then run the setup script (it reads from clipboard automatically, just press Enter to confirm)
+
+> Note: Cookie must be in **Header String** format (`key=value; key=value; ...`), NOT Netscape/curl format.
+
 ## Element Extraction (Plugin)
 
 Besides reading full articles, you can ask the agent to extract specific content from a page. No technical parameters needed — just describe your goal:

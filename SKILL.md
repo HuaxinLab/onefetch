@@ -50,8 +50,22 @@ agent 不需要手动选择适配器，router 根据 URL 自动路由。
 
 ### 平台特殊处理
 
-10. **小红书评论**：默认不抓取评论。仅在用户需要评论时启用 `ONEFETCH_XHS_COMMENT_MODE='state+api'`。若用户未配置评论 Cookie，引导用户执行 `bash scripts/setup_xhs_cookie.sh` 粘贴一次。
-11. **知乎风控**：若出现 `error_code=risk.blocked`，引导用户执行 `bash scripts/setup_zhihu_cookie.sh` 粘贴 Cookie 后重试。
+10. **小红书评论**：默认不抓取评论。仅在用户需要评论时启用 `ONEFETCH_XHS_COMMENT_MODE='state+api'`。若用户未配置评论 Cookie，引导用户配置（见下方 Cookie 配置说明）。
+11. **知乎风控**：若出现 `error_code=risk.blocked`，引导用户配置知乎 Cookie 后重试（见下方 Cookie 配置说明）。
+
+### Cookie 配置说明
+
+需要配置 Cookie 时，引导用户按以下步骤操作：
+
+1. 在浏览器中登录对应平台
+2. 获取 Cookie（任选一种方式）：
+   - **F12 DevTools**：Network → 点击任意请求 → Headers → 复制 `Cookie:` 的值
+   - **浏览器插件**：Cookie-Editor（导出选 Header String）、Get cookies.txt 等
+3. 复制 Cookie 后，直接运行脚本（会自动读取剪贴板）：
+   - 知乎：`bash scripts/setup_zhihu_cookie.sh`
+   - 小红书：`bash scripts/setup_xhs_cookie.sh`
+
+注意：Cookie 格式必须是 **Header String**（`key=value; key=value; ...`），不能是 Netscape/curl 格式。
 
 ### 错误处理
 

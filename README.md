@@ -71,6 +71,18 @@ ln -s /path/to/onefetch ~/.claude/skills/onefetch
 **场景 6：知乎被风控**
 > agent 会提示你配置知乎 Cookie，按提示操作一次即可。
 
+### Cookie 配置方法
+
+部分平台（知乎、小红书评论）需要一次性配置 Cookie：
+
+1. 在浏览器中登录对应平台
+2. 获取 Cookie（任选一种方式）：
+   - **F12 开发者工具**：Network → 点击任意请求 → Headers → 复制 `Cookie:` 的值
+   - **浏览器插件**：Cookie-Editor（导出选 Header String）、Get cookies.txt 等
+3. 复制后直接运行配置脚本（自动读取剪贴板，按 Enter 确认即可）
+
+> 注意：Cookie 格式必须是 Header String（`key=value; key=value; ...`）。
+
 ## 页面元素提取（Plugin）
 
 除了读取整篇文章，你还可以让 agent 从页面中提取特定内容。不需要填写技术参数，直接描述目标即可：
