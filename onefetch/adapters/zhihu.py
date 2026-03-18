@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 from lxml import html
 
 from onefetch.adapters.base import BaseAdapter
+from onefetch.html_to_md import extract_main_content, html_string_to_markdown
 from onefetch.http import create_async_client
 from onefetch.models import Capture, CrawlOutput, FeedEntry
 from onefetch.router import normalize_url
@@ -309,9 +310,9 @@ class ZhihuAdapter(BaseAdapter):
             if not isinstance(article, dict):
                 return "", None, None, None, {"content_type": "zhuanlan_article", "parse_state": "article_not_found"}
             article_title = (article.get("title") or "").strip() or None
-            article_content = self._html_to_text(article.get("content") or "")
+            article_content = html_string_to_markdown(article.get("content") or "")
             if not article_content:
-                article_content = self._html_to_text(article.get("excerpt") or "") or ""
+                article_content = html_string_to_markdown(article.get("excerpt") or "") or ""
             article_author = ((article.get("author") or {}).get("name") or "").strip() or None
             published_at = self._parse_epoch(article.get("updated") or article.get("created"))
             metadata = {
@@ -329,7 +330,7 @@ class ZhihuAdapter(BaseAdapter):
                 return "", None, None, None, {"content_type": "answer", "parse_state": "answer_not_found"}
             question = answer.get("question") or {}
             question_title = (question.get("title") or "").strip()
-            answer_text = self._html_to_text(answer.get("content") or "") or (answer.get("excerpt") or "").strip()
+            answer_text = html_string_to_markdown(answer.get("content") or "") or (answer.get("excerpt") or "").strip()
             lines = []
             if question_title:
                 lines.append(f"问题：{question_title}")
@@ -361,7 +362,7 @@ class ZhihuAdapter(BaseAdapter):
         top_answers = top_answers[:5]
 
         question_title = (question.get("title") or "").strip() or None
-        question_desc = self._html_to_text(question.get("detail") or "") or self._html_to_text(question.get("excerpt") or "")
+        question_desc = html_string_to_markdown(question.get("detail") or "") or html_string_to_markdown(question.get("excerpt") or "")
         sections: list[str] = []
         if question_title:
             sections.append(f"问题：{question_title}")
@@ -371,7 +372,7 @@ class ZhihuAdapter(BaseAdapter):
             answer_blocks: list[str] = []
             completed_count = 0
             for idx, item in enumerate(top_answers, start=1):
-                text = self._html_to_text(item.get("content") or "") or (item.get("excerpt") or "").strip()
+                text = html_string_to_markdown(item.get("content") or "") or (item.get("excerpt") or "").strip()
                 answer_id_value = str(item.get("id") or "").strip()
                 if self._needs_answer_completion(text) and answer_id_value and qid:
                     completed = await self._fetch_answer_full_content(qid, answer_id_value)
@@ -412,7 +413,7 @@ class ZhihuAdapter(BaseAdapter):
         answer = answers.get(answer_id) or answers.get(str(answer_id))
         if not isinstance(answer, dict):
             return ""
-        text = self._html_to_text(answer.get("content") or "")
+        text = html_string_to_markdown(answer.get("content") or "")
         if not text:
             text = (answer.get("excerpt") or "").strip()
         return text
@@ -428,17 +429,15 @@ class ZhihuAdapter(BaseAdapter):
 
     @staticmethod
     def _extract_fallback_body(tree: html.HtmlElement) -> str:
-        candidates = (
-            tree.xpath("//article[contains(@class,'Post-RichText')]")
-            or tree.xpath("//article")
-            or tree.xpath("//main")
-            or tree.xpath("//body")
+        return extract_main_content(
+            tree,
+            selectors=[
+                "//article[contains(@class,'Post-RichText')]",
+                "//article",
+                "//main",
+                "//body",
+            ],
         )
-        if not candidates:
-            return ""
-        text = candidates[0].text_content()
-        text = re.sub(r"\n\s*\n+", "\n\n", text)
-        return text.strip()[:60000]
 
     @staticmethod
     def _is_challenge_or_login_page(final_url: str, body_text: str) -> bool:
@@ -464,19 +463,6 @@ class ZhihuAdapter(BaseAdapter):
         ]
         return any(marker.lower() in text for marker in markers)
 
-    @staticmethod
-    def _html_to_text(raw_html: str) -> str:
-        if not raw_html:
-            return ""
-        try:
-            node = html.fromstring(f"<div>{raw_html}</div>")
-            text = node.text_content()
-        except Exception:
-            text = raw_html
-        text = text.replace("\u00a0", " ")
-        text = re.sub(r"\n\s*\n+", "\n\n", text)
-        lines = [line.strip() for line in text.splitlines()]
-        return "\n".join(line for line in lines if line).strip()
 
     @staticmethod
     def _first_text(tree: html.HtmlElement, xpaths: list[str]) -> str | None:

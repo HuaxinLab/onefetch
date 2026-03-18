@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 from lxml import html
 
 from onefetch.adapters.base import BaseAdapter
+from onefetch.html_to_md import element_to_markdown
 from onefetch.http import create_async_client
 from onefetch.models import Capture, CrawlOutput, FeedEntry
 from onefetch.router import normalize_url
@@ -100,11 +101,11 @@ class WechatAdapter(BaseAdapter):
         content = ""
         blocks = tree.xpath("//*[@id='js_content']")
         if blocks:
-            content = WechatAdapter._clean_text_from_node(blocks[0])
+            content = element_to_markdown(blocks[0])
         if not content:
             article_nodes = tree.xpath("//article") or tree.xpath("//main")
             if article_nodes:
-                content = WechatAdapter._clean_text_from_node(article_nodes[0])
+                content = element_to_markdown(article_nodes[0])
 
         if title and "微信公众平台" in title:
             title = title.replace("微信公众平台", "").strip(" -")
@@ -222,17 +223,6 @@ class WechatAdapter(BaseAdapter):
                 if stripped:
                     return stripped
         return None
-
-    @staticmethod
-    def _clean_text_from_node(node: html.HtmlElement) -> str:
-        clone = html.fromstring(html.tostring(node, encoding="unicode"))
-        for unwanted in clone.xpath(".//script|.//style|.//noscript|.//iframe"):
-            parent = unwanted.getparent()
-            if parent is not None:
-                parent.remove(unwanted)
-        text = clone.text_content()
-        text = re.sub(r"\n\s*\n+", "\n\n", text)
-        return text.strip()
 
     @staticmethod
     def _sanitize_content(text: str) -> tuple[str, dict[str, int]]:
