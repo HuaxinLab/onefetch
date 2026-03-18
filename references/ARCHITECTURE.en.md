@@ -15,7 +15,7 @@ OneFetch/
   scripts/
     bootstrap.sh
     doctor.sh
-    run_ingest.sh
+    run_cli.sh
     setup_cookie.sh
     clean.sh
     pack.sh
@@ -37,7 +37,7 @@ OneFetch/
 ## 3. Runtime Flow
 
 1. User asks agent to read/fetch a URL.
-2. Agent follows `SKILL.md` and invokes `scripts/run_ingest.sh`.
+2. Agent follows `SKILL.md` and invokes `scripts/run_cli.sh`.
 3. CLI extracts URLs and router selects an adapter.
 4. Adapter crawls and maps content into a unified `FeedEntry`.
 5. Pipeline classifies errors and aggregates results.

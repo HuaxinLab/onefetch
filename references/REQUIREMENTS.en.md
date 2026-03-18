@@ -14,7 +14,7 @@ Core positioning:
 ### 2.1 Skill and Entry
 
 1. Root `SKILL.md` must exist.
-2. `scripts/run_ingest.sh` must be the unified runtime entry.
+2. `scripts/run_cli.sh` must be the unified runtime entry.
 3. Agent should complete setup and fetch flows for non-technical users.
 
 ### 2.2 Crawling Capability

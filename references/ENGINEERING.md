@@ -117,4 +117,4 @@ bash scripts/setup_cookie.sh zhihu
 
 说明：
 - 两个脚本都会把 Cookie 保存到 `.secrets/` 目录（默认 600 权限）。
-- `bash scripts/run_ingest.sh ...` 会自动加载已保存 Cookie，无需每次手动设置环境变量。
+- `bash scripts/run_cli.sh ...` 会自动加载已保存 Cookie，无需每次手动设置环境变量。

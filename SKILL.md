@@ -37,7 +37,7 @@ agent 不需要手动选择适配器，router 根据 URL 自动路由。
 
 ### 读取网页（主流程）
 
-3. 默认使用 `scripts/run_ingest.sh --present --from-cache "URL"`，优先复用缓存，减少重复抓取。
+3. 默认使用 `scripts/run_cli.sh ingest --present --from-cache "URL"`，优先复用缓存，减少重复抓取。
 4. 用户明确要求"最新/重新抓取/刷新"时，使用 `--refresh` 强制实时抓取（即使同时带 `--from-cache` 也会跳过缓存读取）。
 5. 默认保持临时缓存写入（`--cache-temp`），便于后续深入分析 / 翻译复用全文。
 6. 仅在用户明确要求保存 / 归档时使用 `--store`。
@@ -46,8 +46,7 @@ agent 不需要手动选择适配器，router 根据 URL 自动路由。
 
 7. agent 用 LLM 整理完内容后（生成摘要、要点、标签），**立刻调用 `cache-backfill` 写入缓存**，不要等下次运行：
    ```bash
-   .venv/bin/python -m onefetch.cli cache-backfill "URL" \
-     --project-root . \
+   bash scripts/run_cli.sh cache-backfill "URL" \
      --json-data '{"summary":"...","key_points":["...","..."],"tags":["..."]}'
    ```
    这样缓存第一时间就是完整的，后续任何操作（翻译、保存、再次查看）都能直接复用。
@@ -89,7 +88,7 @@ agent 不需要手动选择适配器，router 根据 URL 自动路由。
 
 | 用户需求 | 使用 | 原因 |
 |---|---|---|
-| 读取 / 总结 / 翻译整篇文章 | 主流程（`run_ingest.sh`） | 需要完整正文 |
+| 读取 / 总结 / 翻译整篇文章 | 主流程（`run_cli.sh ingest`） | 需要完整正文 |
 | 提取页面中的特定元素（图片 URL、下载链接、某个字段） | 插件（`plugin run`） | 只需要一个值 |
 
 判断规则：
@@ -203,29 +202,29 @@ bash scripts/bootstrap.sh
 bash scripts/doctor.sh
 
 # 默认读取（优先缓存，不存储）
-bash scripts/run_ingest.sh --present --from-cache "https://example.com/article"
+bash scripts/run_cli.sh ingest --present --from-cache "https://example.com/article"
 
 # 用户要求刷新内容（实时抓取）
-bash scripts/run_ingest.sh --present --refresh "https://example.com/article"
+bash scripts/run_cli.sh ingest --present --refresh "https://example.com/article"
 
 # 用户明确要求保存
-bash scripts/run_ingest.sh --store --from-cache "URL"
+bash scripts/run_cli.sh ingest --store --from-cache "URL"
 
 # LLM 整理完内容后，立刻回填到缓存
-.venv/bin/python -m onefetch.cli cache-backfill "URL" \
+bash scripts/run_cli.sh cache-backfill "URL" \
   --json-data '{"summary":"...","key_points":["..."],"tags":["..."]}'
 
 # 查看可用适配器
-bash scripts/run_ingest.sh --list-crawlers
+bash scripts/run_cli.sh ingest --list-crawlers
 
 # 小红书评论（可选，需先配置 Cookie）
 bash scripts/setup_cookie.sh xhs
 ONEFETCH_XHS_COMMENT_MODE='state+api' \
-  bash scripts/run_ingest.sh "https://www.xiaohongshu.com/explore/..."
+  bash scripts/run_cli.sh ingest "https://www.xiaohongshu.com/explore/..."
 
 # 知乎被风控时，配置 Cookie 后重试
 bash scripts/setup_cookie.sh zhihu
-bash scripts/run_ingest.sh --present --refresh "https://zhuanlan.zhihu.com/p/..."
+bash scripts/run_cli.sh ingest --present --refresh "https://zhuanlan.zhihu.com/p/..."
 
 # 安装浏览器渲染组件（SPA/JS 页面需要）
 .venv/bin/python -m pip install -e '.[browser]' && .venv/bin/python -m playwright install chromium
@@ -235,39 +234,39 @@ bash scripts/run_ingest.sh --present --refresh "https://zhuanlan.zhihu.com/p/...
 
 ```bash
 # 查看插件列表
-.venv/bin/python -m onefetch.cli plugin list
+bash scripts/run_cli.sh plugin list
 
 # 查看插件 + 可用 preset
-.venv/bin/python -m onefetch.cli plugin list --with-presets
+bash scripts/run_cli.sh plugin list --with-presets
 
 # 查看某插件的 preset
-.venv/bin/python -m onefetch.cli plugin presets --plugin-id extract_html_js_jsonp
+bash scripts/run_cli.sh plugin presets --plugin-id extract_html_js_jsonp
 
 # CSS 选择器提取
-.venv/bin/python -m onefetch.cli plugin run extract_css_attr \
+bash scripts/run_cli.sh plugin run extract_css_attr \
   --url "https://example.com" \
   --opt selector=.hero \
   --opt attr=src
 
 # JSONP 字段提取
-.venv/bin/python -m onefetch.cli plugin run extract_jsonp_field \
+bash scripts/run_cli.sh plugin run extract_jsonp_field \
   --opt jsonp_url="https://example.com/api.js?callback=img_url" \
   --opt callback=img_url \
   --opt field=img_url
 
 # 链路提取（使用 preset）
-.venv/bin/python -m onefetch.cli plugin run extract_html_js_jsonp \
+bash scripts/run_cli.sh plugin run extract_html_js_jsonp \
   --url "https://www.dingtalk.com/wukong" \
   --opt preset=chain_cdn_js_jsonp_img
 
 # 自动探测（callback/field/regex 未知时）
-.venv/bin/python -m onefetch.cli plugin run extract_html_js_jsonp \
+bash scripts/run_cli.sh plugin run extract_html_js_jsonp \
   --url "https://example.com" \
   --opt auto_detect=true \
   --json
 
 # 失败后诊断（返回 error_code / suggestion / steps）
-.venv/bin/python -m onefetch.cli plugin doctor extract_html_js_jsonp \
+bash scripts/run_cli.sh plugin doctor extract_html_js_jsonp \
   --url "https://example.com" \
   --opt preset=chain_generic_js_jsonp_value \
   --json

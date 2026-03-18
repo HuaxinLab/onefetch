@@ -15,7 +15,7 @@ OneFetch/
   scripts/
     bootstrap.sh          # 环境初始化
     doctor.sh             # 依赖与运行检查
-    run_ingest.sh         # 统一执行入口
+    run_cli.sh         # 统一执行入口
     setup_cookie.sh       # 统一 cookie 配置（支持 zhihu/xhs）
     clean.sh              # 清理缓存/产物（带确认）
     pack.sh               # 打包分享（排除运行产物）
@@ -37,7 +37,7 @@ OneFetch/
 ## 3. 运行流程
 
 1. 用户向 agent 发起“读取网页/抓取链接”请求。
-2. agent 按 `SKILL.md` 调用 `scripts/run_ingest.sh`。
+2. agent 按 `SKILL.md` 调用 `scripts/run_cli.sh`。
 3. CLI 提取 URL，交给 router 选择 adapter。
 4. adapter 执行抓取与解析，返回统一 `FeedEntry`。
 5. pipeline 进行错误分类与结果聚合。

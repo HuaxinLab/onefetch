@@ -9,11 +9,11 @@ platform="${1:-}"
 case "$platform" in
   zhihu)
     cookie_file="zhihu_cookie.txt"
-    run_hint="bash scripts/run_ingest.sh --present --refresh '<zhihu-url>'"
+    run_hint="bash scripts/run_cli.sh ingest --present --refresh '<zhihu-url>'"
     ;;
   xhs)
     cookie_file="xhs_cookie.txt"
-    run_hint="ONEFETCH_XHS_COMMENT_MODE='state+api' bash scripts/run_ingest.sh '<xhs-url>'"
+    run_hint="ONEFETCH_XHS_COMMENT_MODE='state+api' bash scripts/run_cli.sh ingest '<xhs-url>'"
     ;;
   *)
     echo "Usage: bash scripts/setup_cookie.sh <platform>"
