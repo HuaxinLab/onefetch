@@ -8,13 +8,15 @@ DELETE_DATA=""
 
 usage() {
   cat <<USAGE
-Usage: scripts/clean.sh [--all] [--yes] [--keep-data]
+Usage: scripts/clean.sh [--all] [--yes] [--with-data]
 
 Options:
   --all        Also remove .venv (will ask confirmation unless --yes)
   --yes        Skip confirmations
-  --keep-data  Keep data/ and reports/ even after confirmation phase
+  --with-data  Also delete data/ (saved articles, normally kept)
   -h, --help   Show help
+
+Default behavior: clear cache and runtime artifacts, keep data/
 USAGE
 }
 
@@ -28,8 +30,8 @@ while [[ $# -gt 0 ]]; do
       ASSUME_YES=1
       shift
       ;;
-    --keep-data)
-      DELETE_DATA=0
+    --with-data)
+      DELETE_DATA=1
       shift
       ;;
     -h|--help)
@@ -46,37 +48,38 @@ done
 
 cd "$PROJECT_ROOT"
 
-if [[ -z "$DELETE_DATA" ]]; then
-  if [[ "$ASSUME_YES" == "1" ]]; then
-    DELETE_DATA=1
-  elif [[ -t 0 ]]; then
-    echo "[clean] data/: saved content outputs; reports/: run summary files."
-    read -r -p "[clean] delete data/ and reports/? [y/N] " answer
-    case "$answer" in
-      y|Y|yes|YES)
-        DELETE_DATA=1
-        ;;
-      *)
-        DELETE_DATA=0
-        ;;
-    esac
-  else
-    DELETE_DATA=0
-    echo "[clean] non-interactive mode without --yes; keeping data/ and reports/"
-  fi
-fi
-
-echo "[clean] removing runtime caches/artifacts"
-if [[ "$DELETE_DATA" == "1" ]]; then
-  rm -rf data reports
-else
-  echo "[clean] skipped data/ and reports/"
-fi
+# Always clean: cache + runtime artifacts
+echo "[clean] removing cache and runtime artifacts"
+rm -rf reports
 rm -rf .pytest_cache
 rm -rf onefetch.egg-info
 find . -type d -name "__pycache__" -prune -exec rm -rf {} +
 find . -type f \( -name "*.pyc" -o -name "*.pyo" -o -name ".DS_Store" \) -delete
 
+# data/ requires explicit opt-in or confirmation
+if [[ "$DELETE_DATA" == "1" ]]; then
+  echo "[clean] removing data/ (--with-data)"
+  rm -rf data
+elif [[ -z "$DELETE_DATA" && -d "data" ]]; then
+  if [[ "$ASSUME_YES" == "1" ]]; then
+    echo "[clean] kept data/ (use --with-data to delete)"
+  elif [[ -t 0 ]]; then
+    read -r -p "[clean] also delete data/ (saved articles)? [y/N] " answer
+    case "$answer" in
+      y|Y|yes|YES)
+        echo "[clean] removing data/"
+        rm -rf data
+        ;;
+      *)
+        echo "[clean] kept data/"
+        ;;
+    esac
+  else
+    echo "[clean] kept data/"
+  fi
+fi
+
+# .venv only with --all
 if [[ "$CLEAN_VENV" == "1" ]]; then
   if [[ "$ASSUME_YES" == "1" ]]; then
     echo "[clean] removing .venv"
