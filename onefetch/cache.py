@@ -102,6 +102,13 @@ class TempCacheService:
             llm_outputs_state=llm_state,
         )
 
+    def touch_result(self, canonical_url: str, content_hash: str) -> None:
+        """Update mtime of an existing cache file without rewriting it."""
+        cache_id = self._build_cache_id(canonical_url, content_hash)
+        path = self._cache_dir / f"{cache_id}.json"
+        if path.exists():
+            path.touch()
+
     @staticmethod
     def _build_cache_id(canonical_url: str, content_hash: str) -> str:
         base = (canonical_url or "").strip() or "unknown_url"

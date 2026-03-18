@@ -390,6 +390,7 @@ async def run_ingest(args: argparse.Namespace) -> int:
     report = BatchIngestReport(requested_urls=urls)
     pending_urls = urls
     cached_results_by_url: dict[str, IngestResult] = {}
+    cache_hit_urls: set[str] = set()
     if args.from_cache and not args.refresh and cache_service is not None:
         pending_urls = []
         for source_url in urls:
@@ -399,6 +400,7 @@ async def run_ingest(args: argparse.Namespace) -> int:
                 continue
             cached.cache_path = "<cache-hit>"
             cached_results_by_url[source_url] = cached
+            cache_hit_urls.add(source_url)
 
     if pending_urls:
         fresh_report = await pipeline.ingest_urls(pending_urls, forced_adapter=args.crawler or None, store=args.store)
@@ -425,7 +427,14 @@ async def run_ingest(args: argparse.Namespace) -> int:
         for result in report.results:
             if result.status == "failed":
                 continue
-            result.cache_path = cache_service.save_result(result)
+            if result.source_url in cache_hit_urls and llm_output_path is None and not args.store:
+                cache_service.touch_result(result.canonical_url, result.content_hash)
+            else:
+                result.cache_path = cache_service.save_result(result)
+
+    # LLM output consumed — delete so it doesn't get stale-applied on next run
+    if llm_output_path is not None and llm_output_path.exists():
+        llm_output_path.unlink()
 
     summary = _build_run_summary(report, duration_sec=duration)
     _write_report_files(summary, json_path=args.report_json, md_path=args.report_md)
