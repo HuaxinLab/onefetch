@@ -57,6 +57,9 @@ After installation, tell the agent:
 **Scenario 2: Valuable content, save it**
 > "Organize this content and save it."
 
+**Scenario 2b: Save article with images**
+> "Save this article including all images."
+
 **Scenario 3: Agent says summary/tags may be inaccurate**
 > "Use the saved full text and regenerate summary and tags." (No need to refetch.)
 
@@ -70,6 +73,12 @@ After installation, tell the agent:
 
 **Scenario 6: Zhihu anti-bot block**
 > The agent will prompt you to configure a Zhihu Cookie. Follow the instructions once.
+
+**Scenario 7: Extract/download images from a page**
+> "Download the images from this post", "Extract image links from this page"
+
+**Scenario 8: Analyze text and images together**
+> "Analyze the text and images in this article" (agent sends both to a multimodal model)
 
 ### Cookie Setup
 
