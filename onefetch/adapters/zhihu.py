@@ -4,7 +4,7 @@ import json
 import os
 import re
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from html import unescape
 from urllib.parse import urlparse
 
@@ -18,6 +18,10 @@ from onefetch.router import normalize_url
 _INITIAL_DATA_RE = re.compile(
     r'<script id="js-initialData" type="text/json">([\s\S]*?)</script>',
     re.IGNORECASE,
+)
+_WINDOW_STATE_RE = re.compile(
+    r"window\.__INITIAL_STATE__\s*=\s*(\{.*?\})\s*;?\s*</script>",
+    re.DOTALL,
 )
 
 
@@ -68,6 +72,34 @@ class ZhihuAdapter(BaseAdapter):
         images: list[str] = []
         if not content:
             content, images = self._extract_fallback_body(tree)
+
+        # SPA shell detection: no state, no useful content → try Playwright
+        if not state and self._looks_like_spa_shell(content) and render_mode != "browser":
+            cookie_header = self._request_headers(url).get("cookie", "")
+            rendered_html, rendered_url, browser_status = await self._render_with_zhihu_browser(url, cookie_header)
+            if rendered_html:
+                render_mode = "browser"
+                body_text = rendered_html
+                final_url = rendered_url or final_url
+                canonical = normalize_url(final_url)
+                tree = html.fromstring(body_text)
+                state = self._extract_initial_state(body_text)
+                content, parsed_title, parsed_author, published_at, metadata = await self._build_from_state(
+                    state,
+                    question_id,
+                    answer_id,
+                    article_id,
+                )
+                if parsed_title:
+                    title = parsed_title
+                if parsed_author:
+                    author = parsed_author
+                if not content:
+                    content, images = self._extract_fallback_body(tree)
+                if not published_at:
+                    published_at = self._extract_publish_time_from_dom(tree)
+                if not author:
+                    author = self._extract_author_from_dom(tree)
 
         if self._is_challenge_or_login_page(final_url, body_text) and self._looks_like_challenge_payload(title, content):
             raise RuntimeError(
@@ -264,16 +296,32 @@ class ZhihuAdapter(BaseAdapter):
 
     @staticmethod
     def _extract_initial_state(html_text: str) -> dict | None:
-        match = _INITIAL_DATA_RE.search(html_text or "")
-        if not match:
-            return None
-        raw = (match.group(1) or "").strip()
-        if not raw:
-            return None
-        try:
-            return json.loads(unescape(raw))
-        except json.JSONDecodeError:
-            return None
+        text = html_text or ""
+        # Try <script id="js-initialData"> first (server-rendered pages)
+        match = _INITIAL_DATA_RE.search(text)
+        if match:
+            raw = (match.group(1) or "").strip()
+            if raw:
+                # Try raw first (unescape can break JSON with embedded HTML)
+                try:
+                    return json.loads(raw)
+                except json.JSONDecodeError:
+                    pass
+                try:
+                    return json.loads(unescape(raw))
+                except json.JSONDecodeError:
+                    pass
+        # Fallback: window.__INITIAL_STATE__ (Playwright-rendered pages)
+        match2 = _WINDOW_STATE_RE.search(text)
+        if match2:
+            raw2 = (match2.group(1) or "").strip()
+            if raw2:
+                try:
+                    raw2 = raw2.replace("undefined", "null")
+                    return json.loads(raw2)
+                except json.JSONDecodeError:
+                    pass
+        return None
 
     @staticmethod
     def _extract_ids(url: str) -> tuple[str | None, str | None, str | None]:
@@ -376,7 +424,7 @@ class ZhihuAdapter(BaseAdapter):
                     continue
                 author = ((item.get("author") or {}).get("name") or "匿名用户").strip()
                 votes = int(item.get("voteupCount") or 0)
-                answer_blocks.append(f"{idx}. {author}（赞同 {votes}）\n{text}")
+                answer_blocks.append(f"{idx}. {author}（赞同 {votes}，answer_id: {answer_id_value}）\n{text}")
             if answer_blocks:
                 sections.append("高赞回答：\n" + "\n\n".join(answer_blocks))
         else:
@@ -392,7 +440,8 @@ class ZhihuAdapter(BaseAdapter):
             "top_answers_count": len(top_answers),
             "completed_answers_count": completed_count,
         }
-        return body, question_title, None, published_at, metadata
+        question_author = ((question.get("author") or {}).get("name") or "").strip() or None
+        return body, question_title, question_author, published_at, metadata
 
     async def _fetch_answer_full_content(self, question_id: str, answer_id: str) -> str:
         answer_url = f"https://www.zhihu.com/question/{question_id}/answer/{answer_id}"
@@ -423,7 +472,10 @@ class ZhihuAdapter(BaseAdapter):
     @staticmethod
     def _extract_fallback_body(tree: html.HtmlElement) -> tuple[str, list[str]]:
         candidates = (
-            tree.xpath("//article[contains(@class,'Post-RichText')]")
+            # Playwright-rendered answer page: target the specific answer
+            tree.xpath("//div[contains(@class,'RichContent-inner')]")
+            # Server-rendered article page
+            or tree.xpath("//article[contains(@class,'Post-RichText')]")
             or tree.xpath("//article")
             or tree.xpath("//main")
             or tree.xpath("//body")
@@ -445,6 +497,21 @@ class ZhihuAdapter(BaseAdapter):
             "登录/注册",
         ]
         return any(keyword.lower() in body_lower for keyword in keywords)
+
+    @staticmethod
+    def _looks_like_spa_shell(content: str) -> bool:
+        """Detect if content is a SPA shell (CSS/JS noise instead of real text)."""
+        if not content or len(content.strip()) < 100:
+            return True
+        # If content starts with CSS rules, it's a SPA shell
+        stripped = content.strip()
+        if stripped.startswith(".css-") or stripped.startswith("html{"):
+            return True
+        # High ratio of CSS-like content
+        css_chars = sum(1 for c in stripped[:2000] if c in "{}:;")
+        if len(stripped[:2000]) > 0 and css_chars / len(stripped[:2000]) > 0.05:
+            return True
+        return False
 
     @staticmethod
     def _looks_like_challenge_payload(title: str | None, content: str) -> bool:
@@ -479,6 +546,32 @@ class ZhihuAdapter(BaseAdapter):
                 stripped = value.strip()
                 if stripped:
                     return stripped
+        return None
+
+    @staticmethod
+    @staticmethod
+    def _extract_publish_time_from_dom(tree: html.HtmlElement) -> datetime | None:
+        """Extract publish time from Playwright-rendered DOM (e.g. '发布于 2026-03-12 13:21')."""
+        _CST = timezone(timedelta(hours=8))
+        nodes = tree.xpath("//div[contains(@class,'ContentItem-time')]")
+        for node in nodes:
+            text = node.text_content().strip()
+            m = re.search(r"(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2})", text)
+            if m:
+                try:
+                    return datetime.strptime(m.group(1), "%Y-%m-%d %H:%M").replace(tzinfo=_CST)
+                except ValueError:
+                    continue
+        return None
+
+    @staticmethod
+    def _extract_author_from_dom(tree: html.HtmlElement) -> str | None:
+        """Extract author name from Playwright-rendered DOM."""
+        nodes = tree.xpath("//a[contains(@class,'UserLink')]")
+        for node in nodes:
+            name = node.text_content().strip()
+            if name:
+                return name
         return None
 
     @staticmethod

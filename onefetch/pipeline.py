@@ -42,6 +42,8 @@ class IngestionPipeline:
                         status="fetched",
                         content_hash=feed.content_hash,
                         title=feed.title,
+                        author=feed.author or "",
+                        published_at=feed.published_at.isoformat() if feed.published_at else "",
                         comment_count=len(feed.comments),
                         comment_source=comment_source,
                         body_preview=self._preview(_IMG_PLACEHOLDER_RE.sub("", feed.body), limit=280),

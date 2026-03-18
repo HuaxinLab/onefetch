@@ -58,6 +58,8 @@ class IngestResult(BaseModel):
     status: Literal["fetched", "stored", "duplicate", "failed"]
     content_hash: str = ""
     title: str = ""
+    author: str = ""
+    published_at: str = ""
     error: str = ""
     error_code: str = ""
     error_type: str = ""

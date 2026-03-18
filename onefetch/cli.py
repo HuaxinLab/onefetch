@@ -335,6 +335,10 @@ def _print_present(report, *, with_images: bool = False) -> None:
         print(f"- source_url: {result.source_url}")
         if result.title:
             print(f"- title: {result.title}")
+        if result.author:
+            print(f"- author: {result.author}")
+        if result.published_at:
+            print(f"- published_at: {result.published_at}")
         print(f"- comments: {result.comment_count} ({result.comment_source})")
         if result.error_code:
             print(f"- error_code: {result.error_code}")

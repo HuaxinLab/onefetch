@@ -70,6 +70,8 @@ class StorageService:
             "canonical_url": result.canonical_url,
             "crawler_id": result.crawler_id,
             "title": result.title,
+            "author": result.author,
+            "published_at": result.published_at,
             "content_hash": result.content_hash,
             "body": result.body_full or "",
             "images": result.images,
@@ -90,6 +92,10 @@ class StorageService:
             f"- 来源: {result.source_url}",
             f"- 平台: {result.crawler_id}",
         ]
+        if result.author:
+            lines.append(f"- 作者: {result.author}")
+        if result.published_at:
+            lines.append(f"- 发布时间: {result.published_at}")
         if result.comment_count:
             lines.append(f"- 评论: {result.comment_count} ({result.comment_source})")
         lines.append("")

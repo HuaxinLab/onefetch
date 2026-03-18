@@ -46,6 +46,7 @@ def node_to_text(node: lxml_html.HtmlElement, *, image_placeholders: bool = Fals
                     el.tail = marker
     text = node.text_content()
     text = text.replace("\u00a0", " ")
+    text = text.replace("\u200b", "")
     text = re.sub(r"\n\s*\n+", "\n\n", text)
     lines = [line.strip() for line in text.splitlines()]
     result = "\n".join(line for line in lines if line).strip()
