@@ -8,7 +8,6 @@ from datetime import datetime
 from lxml import html
 
 from onefetch.adapters.base import BaseAdapter
-from onefetch.html_to_md import extract_main_content
 from onefetch.http import create_async_client
 from onefetch.models import Capture, CrawlOutput, FeedEntry
 from onefetch.router import normalize_url
@@ -57,7 +56,7 @@ class GenericHtmlAdapter(BaseAdapter):
                 ],
             )
             published_at = self._parse_datetime(published_raw)
-            content = extract_main_content(tree)
+            content = self._extract_main_text(tree)
 
         should_try_browser = mode == "browser" or (mode == "auto" and self._needs_browser_fallback(content, body_text))
         browser_status: dict[str, str] = {"status": "skipped", "reason": "not_needed"}
@@ -81,7 +80,7 @@ class GenericHtmlAdapter(BaseAdapter):
                     ],
                 )
                 published_at = self._parse_datetime(published_raw)
-                content = extract_main_content(tree)
+                content = self._extract_main_text(tree)
 
         if not body_text and fetch_error:
             raise RuntimeError(f"generic_html fetch failed: {fetch_error}")
@@ -142,6 +141,29 @@ class GenericHtmlAdapter(BaseAdapter):
                     return stripped
         return None
 
+    @staticmethod
+    def _extract_main_text(tree: html.HtmlElement) -> str:
+        cleaned = html.fromstring(html.tostring(tree, encoding="unicode"))
+        remove_xpaths = [
+            "//nav",
+            "//header",
+            "//footer",
+            "//*[@role='navigation']",
+            "//*[@role='banner']",
+            "//*[contains(concat(' ', normalize-space(@class), ' '), ' sidebar ')]",
+        ]
+        for xpath in remove_xpaths:
+            for node in cleaned.xpath(xpath):
+                parent = node.getparent()
+                if parent is not None:
+                    parent.remove(node)
+
+        candidates = cleaned.xpath("//article") or cleaned.xpath("//main") or cleaned.xpath("//body")
+        if not candidates:
+            return ""
+        text = candidates[0].text_content()
+        text = re.sub(r"\n\s*\n+", "\n\n", text)
+        return text.strip()[:20000]
 
     @staticmethod
     def _needs_browser_fallback(content: str, body_text: str) -> bool:
