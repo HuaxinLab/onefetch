@@ -443,7 +443,7 @@ class ZhihuAdapter(BaseAdapter):
         )
         if not candidates:
             return ""
-        return node_to_text(candidates[0])[:60000]
+        return node_to_text(candidates[0], image_placeholders=True)[:60000]
 
     @staticmethod
     def _is_challenge_or_login_page(final_url: str, body_text: str) -> bool:
@@ -475,7 +475,7 @@ class ZhihuAdapter(BaseAdapter):
             return ""
         try:
             node = html.fromstring(f"<div>{raw_html}</div>")
-            return node_to_text(node)
+            return node_to_text(node, image_placeholders=True)
         except Exception:
             return raw_html.strip()
 

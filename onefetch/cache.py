@@ -33,6 +33,7 @@ class TempCacheService:
             "body_preview": result.body_preview,
             "body_excerpt": result.body_excerpt,
             "body_full": result.body_full,
+            "images": result.images,
             "llm_outputs": result.llm_outputs.model_dump(),
             "llm_outputs_state": result.llm_outputs_state,
             "error": result.error,
@@ -98,6 +99,7 @@ class TempCacheService:
             body_preview=str(payload.get("body_preview") or ""),
             body_excerpt=str(payload.get("body_excerpt") or ""),
             body_full=str(payload.get("body_full") or ""),
+            images=list(payload.get("images") or []),
             llm_outputs=llm_outputs,
             llm_outputs_state=llm_state,
         )

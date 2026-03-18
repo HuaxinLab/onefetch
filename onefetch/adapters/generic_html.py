@@ -155,7 +155,7 @@ class GenericHtmlAdapter(BaseAdapter):
         candidates = cleaned.xpath("//article") or cleaned.xpath("//main") or cleaned.xpath("//body")
         if not candidates:
             return ""
-        return node_to_text(candidates[0])[:20000]
+        return node_to_text(candidates[0], image_placeholders=True)[:20000]
 
     @staticmethod
     def _extract_images(tree: html.HtmlElement) -> list[str]:

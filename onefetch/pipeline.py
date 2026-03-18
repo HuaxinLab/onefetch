@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import httpx
 
+import re
+
 from onefetch.models import BatchIngestReport, IngestResult
 from onefetch.router import Router
+
+_IMG_PLACEHOLDER_RE = re.compile(r"\[IMG:\d+\]\n?")
 
 
 class IngestionPipeline:
@@ -40,8 +44,8 @@ class IngestionPipeline:
                         title=feed.title,
                         comment_count=len(feed.comments),
                         comment_source=comment_source,
-                        body_preview=self._preview(feed.body, limit=280),
-                        body_excerpt=self._preview(feed.body, limit=1600),
+                        body_preview=self._preview(_IMG_PLACEHOLDER_RE.sub("", feed.body), limit=280),
+                        body_excerpt=self._preview(_IMG_PLACEHOLDER_RE.sub("", feed.body), limit=1600),
                         body_full=(feed.body or "").strip(),
                         images=feed.images,
                         risk_controlled=risk_controlled,

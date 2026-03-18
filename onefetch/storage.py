@@ -92,18 +92,19 @@ class StorageService:
         if llm.tags:
             lines.extend(["## 标签", "", ", ".join(llm.tags), ""])
 
-        # Images
-        if with_images and result.images:
-            lines.extend(["## 图片", ""])
-            for i, img_url in enumerate(result.images):
-                local_path = f"images/{i + 1:03d}.jpg"
-                lines.append(f"![{i + 1}]({local_path})")
-            lines.append("")
-
-        # Body
+        # Body — replace [IMG:N] with local image paths or strip them
         body = result.body_full or result.body_excerpt or ""
-        if body:
-            lines.extend(["## 正文", "", body])
+        if with_images and result.images:
+            import re
+            for i in range(len(result.images)):
+                body = body.replace(f"[IMG:{i + 1}]", f"![{i + 1}](images/{i + 1:03d}.jpg)")
+            # Strip any remaining placeholders
+            body = re.sub(r"\[IMG:\d+\]", "", body)
+        else:
+            import re
+            body = re.sub(r"\[IMG:\d+\]\n?", "", body)
+        if body.strip():
+            lines.extend(["## 正文", "", body.strip()])
 
         path = article_dir / "note.md"
         path.write_text("\n".join(lines), encoding="utf-8")

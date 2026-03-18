@@ -25,6 +25,12 @@ from onefetch.storage import StorageService
 
 URL_RE = re.compile(r"https?://[^\s<>()\[\]{}\"']+")
 SENTENCE_SPLIT_RE = re.compile(r"(?<=[。！？!?\.])\s+")
+IMG_PLACEHOLDER_RE = re.compile(r"\[IMG:\d+\]\n?")
+
+
+def strip_image_placeholders(text: str) -> str:
+    """Remove [IMG:N] markers from text."""
+    return IMG_PLACEHOLDER_RE.sub("", text).strip()
 
 
 def extract_urls(chunks: list[str], text: str = "") -> list[str]:
@@ -254,7 +260,7 @@ async def _try_llm_regenerate(result) -> bool:
 
 
 def _regenerate_llm_outputs_from_rules(result) -> None:
-    body = (result.body_full or result.body_excerpt or result.body_preview or "").strip()
+    body = strip_image_placeholders(result.body_full or result.body_excerpt or result.body_preview or "")
     if not body:
         return
     summary = _preview_text(body, limit=360)
@@ -321,7 +327,7 @@ def _build_key_points(text: str, max_points: int = 3) -> list[str]:
     return [point[:180] for point in candidates[:max_points]]
 
 
-def _print_present(report) -> None:
+def _print_present(report, *, with_images: bool = False) -> None:
     for idx, result in enumerate(report.results, start=1):
         print(f"### Item {idx}")
         print(f"- status: {result.status}")
@@ -336,7 +342,7 @@ def _print_present(report) -> None:
             print(f"- retryable: {result.retryable}")
         if result.action_hint:
             print(f"- action_hint: {result.action_hint}")
-        points = _build_key_points(result.body_excerpt)
+        points = _build_key_points(strip_image_placeholders(result.body_excerpt))
         if points:
             print("- key_points:")
             for point in points:
@@ -344,10 +350,15 @@ def _print_present(report) -> None:
         if result.body_preview:
             print(f"- summary: {result.body_preview}")
         if result.body_full:
+            body_output = result.body_full if with_images else strip_image_placeholders(result.body_full)
             print("- full_body:")
             print("```text")
-            print(result.body_full)
+            print(body_output)
             print("```")
+        if with_images and result.images:
+            print("- images:")
+            for i, img_url in enumerate(result.images, 1):
+                print(f"  - [IMG:{i}]: {img_url}")
         if result.llm_outputs.summary:
             print(f"- llm_summary: {result.llm_outputs.summary}")
         print(f"- llm_outputs_state: {result.llm_outputs_state}")
@@ -464,14 +475,6 @@ async def run_ingest(args: argparse.Namespace) -> int:
         for result in report.results:
             if result.status == "failed":
                 continue
-            # Images not in cache — re-crawl to get them
-            if with_images and not result.images and result.source_url in cache_hit_states:
-                try:
-                    adapter = router.route(result.source_url, forced_adapter=args.crawler or None)
-                    feed = await adapter.crawl(result.source_url)
-                    result.images = feed.images
-                except Exception:
-                    pass
             article_dir, is_dup = storage.store_result(result, with_images=with_images)
             result.feed_path = article_dir
             result.status = "duplicate" if is_dup else "stored"
@@ -511,7 +514,7 @@ async def run_ingest(args: argparse.Namespace) -> int:
 
     if args.present:
         print("\n## Present")
-        _print_present(report)
+        _print_present(report, with_images=getattr(args, "with_images", False))
 
     if args.report_json:
         print(f"  report_json={Path(args.report_json).expanduser()}")

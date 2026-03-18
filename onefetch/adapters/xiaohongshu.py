@@ -271,6 +271,15 @@ class XiaohongshuAdapter(BaseAdapter):
         if desc:
             parts.append(desc)
 
+        # Insert image placeholders
+        image_list = note.get("imageList") or []
+        img_index = 0
+        for img in image_list:
+            url = (img.get("urlDefault") or img.get("url") or "").strip()
+            if url and url.startswith("http"):
+                img_index += 1
+                parts.append(f"[IMG:{img_index}]")
+
         tags = note.get("tagList") or []
         tag_names = [item.get("name", "").strip() for item in tags if isinstance(item, dict) and item.get("name")]
         if tag_names:

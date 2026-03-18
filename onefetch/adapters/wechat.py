@@ -239,7 +239,7 @@ class WechatAdapter(BaseAdapter):
             parent = unwanted.getparent()
             if parent is not None:
                 parent.remove(unwanted)
-        return node_to_text(clone)
+        return node_to_text(clone, image_placeholders=True)
 
     @staticmethod
     def _sanitize_content(text: str) -> tuple[str, dict[str, int]]:

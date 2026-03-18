@@ -15,8 +15,13 @@ _BLOCK_TAGS = frozenset({
 })
 
 
-def node_to_text(node: lxml_html.HtmlElement) -> str:
-    """Extract text from an lxml element, preserving block-level line breaks."""
+def node_to_text(node: lxml_html.HtmlElement, *, image_placeholders: bool = False) -> str:
+    """Extract text from an lxml element, preserving block-level line breaks.
+
+    If ``image_placeholders`` is True, ``<img>`` tags are replaced with
+    ``[IMG:N]`` markers so that image positions can be reconstructed later.
+    """
+    img_index = 0
     for el in node.iter():
         if el.tag in _BLOCK_TAGS:
             if el.text:
@@ -27,6 +32,15 @@ def node_to_text(node: lxml_html.HtmlElement) -> str:
                 el.tail = el.tail + "\n"
             else:
                 el.tail = "\n"
+        if image_placeholders and el.tag == "img":
+            src = el.get("data-src") or el.get("src") or ""
+            if src and src.startswith("http") and "svg+xml" not in src and "1px" not in src:
+                img_index += 1
+                marker = f"\n[IMG:{img_index}]\n"
+                if el.tail:
+                    el.tail = marker + el.tail
+                else:
+                    el.tail = marker
     text = node.text_content()
     text = text.replace("\u00a0", " ")
     text = re.sub(r"\n\s*\n+", "\n\n", text)

@@ -69,9 +69,28 @@ agent 不需要手动选择适配器，router 根据 URL 自动路由。
    适用场景：
    - 用户说"下载这个帖子的图片"、"提取图片链接"
    - 用户说"保存这篇文章的图片"
-   - 需要把图片交给多模态模型分析
 
    `images` 命令走完整的 adapter 流程，自动识别平台并从正确的位置提取图片（小红书从 state JSON、微信从文章内容区、知乎/通用从 img 标签）。
+
+### 图文联合分析（--with-images）
+
+10. 当用户需要图文一起分析（如多模态模型）时，在 `--present` 上加 `--with-images`：
+    ```bash
+    bash scripts/run_cli.sh ingest --present --with-images --from-cache "URL"
+    ```
+    输出中 body 会保留 `[IMG:N]` 标记表示图片原始位置，同时列出图片 URL：
+    ```
+    - full_body:
+    ...文字内容...
+    [IMG:1]
+    ...文字内容...
+    [IMG:2]
+    ...
+    - images:
+      - [IMG:1]: https://...
+      - [IMG:2]: https://...
+    ```
+    agent 可以把 body 文本 + 图片 URL 一起交给多模态模型分析，图片位置信息保留。
 
 ### 获取原始 HTML（--raw）
 
