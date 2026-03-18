@@ -56,7 +56,16 @@ argument-hint: [url-or-free-text]
   - `callback`：默认 `img_url`
   - `field`：默认 `img_url`
   - `append_version`：`true/false`，是否拼接 `?v=...`
+  - `preset`：可直接使用预设参数（如 `template_html_js_jsonp`）
+  - `js_url_regexes/jsonp_base_regexes`：支持多候选（数组或 `a||b`）
   - 可选直传：`html`、`js_body`、`jsonp_body`（便于调试/离线测试）
+
+内置常用 preset（`onefetch/plugin_presets/*.json`）：
+- `template_html_js_jsonp`：模板示例，给 agent 学习 preset 结构与字段写法
+- `chain_cdn_js_jsonp_img`：优先提取图片 URL（`img_url`），支持版本拼接与默认图兜底
+- `chain_cdn_js_jsonp_download`：优先提取下载链接字段（`download_url`）
+- `chain_generic_js_jsonp_value`：未知站点快速探测（`callback/value`）
+- `chain_js_only_jsonp_value`：已知 JS URL 场景，跳过 HTML 定位
 
 选型规则：
 - 页面 DOM 属性/文本提取：优先 `extract_css_attr`
@@ -116,9 +125,13 @@ bash scripts/run_ingest.sh --present --refresh "https://zhuanlan.zhihu.com/p/...
 # 插件运行：链路提取（HTML -> JS -> JSONP -> 字段）
 .venv/bin/python -m onefetch.cli plugin run extract_html_js_jsonp \
   --url "https://www.dingtalk.com/wukong" \
-  --opt callback=img_url \
-  --opt field=img_url \
-  --opt append_version=true
+  --opt preset=chain_cdn_js_jsonp_img
+
+# 需要排查失败原因时，输出 JSON（含 trace）
+.venv/bin/python -m onefetch.cli plugin run extract_html_js_jsonp \
+  --url "https://www.dingtalk.com/wukong" \
+  --opt preset=chain_cdn_js_jsonp_img \
+  --json
 ```
 
 ## 参考文档

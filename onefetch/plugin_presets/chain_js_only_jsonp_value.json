@@ -1,0 +1,15 @@
+{
+  "plugin_id": "extract_html_js_jsonp",
+  "description": "Chain preset when JS URL is already known (skip HTML discovery)",
+  "options": {
+    "callback": "callback",
+    "field": "value",
+    "append_version": "false",
+    "fallback_default_image": "false",
+    "js_url": "https://cdn.example.com/app.bundle.js",
+    "jsonp_base_regexes": [
+      "(https://[^\"\\\\]+\\.js\\?t=)",
+      "(https://[^\"\\\\]+callback=[^\"\\\\]+)"
+    ]
+  }
+}

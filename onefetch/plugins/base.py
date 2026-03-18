@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 from typing import Protocol
 
 
@@ -8,7 +9,7 @@ from typing import Protocol
 class PluginTask:
     plugin_id: str
     url: str = ""
-    options: dict[str, str] = field(default_factory=dict)
+    options: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -17,7 +18,7 @@ class PluginResult:
     ok: bool
     value: str = ""
     error: str = ""
-    meta: dict[str, str] = field(default_factory=dict)
+    meta: dict[str, Any] = field(default_factory=dict)
 
 
 class Plugin(Protocol):

@@ -63,6 +63,11 @@ bash scripts/doctor.sh
 4. 增加测试（`tests/plugins/`）
 5. 只更新 `SKILL.md` 和工程文档；`README` 保持面向普通用户的最小说明
 
+Preset 约定：
+- 内置 preset：`onefetch/plugin_presets/*.json`（应纳入 git，随打包发布）
+- 本地私有 preset：`.secrets/plugin_presets/*.json`（不纳入 git，不随打包发布）
+- 读取优先级：`ONEFETCH_PLUGIN_PRESET_DIR` > `.secrets/plugin_presets` > `onefetch/plugin_presets`
+
 ## 5. 质量门槛
 
 合并前至少满足：

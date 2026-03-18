@@ -60,6 +60,30 @@ After installation, tell the agent (this is all non-technical users need):
 - Scenario 4: You want the latest page content
 : "Refresh this URL first, then re-organize and save it: <URL>"
 
+## Plugin Capabilities (For End Users)
+
+You do not need to provide low-level parameters (callback/regex).  
+Describe your goal in natural language, and the agent will choose/test the right plugin.
+
+Available capability types:
+- Element extraction: fetch a specific `src/href/text` from a page
+- JSONP field extraction: fetch one field from a callback payload
+- Chain extraction: HTML -> JS -> JSONP -> target field
+
+Built-in preset families (for agent reuse):
+- `template_html_js_jsonp`: template-only preset for learning/writing new presets
+- `chain_cdn_js_jsonp_img`: image URL focused extraction
+- `chain_cdn_js_jsonp_download`: download URL focused extraction
+- `chain_generic_js_jsonp_value`: quick probing for unknown sites
+- `chain_js_only_jsonp_value`: use when JS URL is already known
+
+How to ask the agent:
+- "Get the download button link from this page: <URL>"
+- "This page has a dynamic image. Extract the final image URL: <URL>"
+- "Extract `img_url` from this callback response: <URL>"
+
+If extraction fails, the agent should return a concise reason and concrete next-step suggestion.
+
 ## Directory Layout
 
 - `SKILL.md`

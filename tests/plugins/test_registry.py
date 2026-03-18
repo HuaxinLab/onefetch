@@ -62,3 +62,33 @@ def test_extract_html_js_jsonp_chain_with_inline_inputs() -> None:
     result = registry.run(task)
     assert result.ok is True
     assert result.value == "https://example.com/live.png?v=8"
+    assert isinstance(result.meta.get("steps"), list)
+    assert result.meta.get("selected", {}).get("fallback_used") is False
+
+
+def test_extract_html_js_jsonp_supports_multiple_patterns() -> None:
+    registry = create_default_registry()
+    html = '<script src="//cdn.dingtalkapps.com/dingding/wukong_office_network/0.2.10/wukong/abc.js"></script>'
+    js = (
+        'var x="https://hudong.alicdn.com/api/data/v2/438eae9715f945468d599660d2d92aeb.js?t=";'
+        'var b={imageUrl:"https://fallback.example.com/default.png",version:"8"};'
+    )
+    task = PluginTask(
+        plugin_id="extract_html_js_jsonp",
+        options={
+            "html": html,
+            "js_body": js,
+            "js_url_regexes": ["(https?://none.invalid/abc.js)", "(https?:)?//cdn\\.dingtalkapps\\.com/dingding/wukong_office_network/[^\"\\\\]+/wukong/[^\"\\\\]+\\.js"],
+            "jsonp_base_regexes": ["(https://none.invalid/api.js?t=)", "(https://hudong\\.alicdn\\.com/api/data/v2/[^\"\\\\]+\\.js\\?t=)"],
+            "jsonp_body": 'img_url({"img_url":"https://example.com/live.png"})',
+            "callback": "img_url",
+            "field": "img_url",
+            "append_version": "true",
+        },
+    )
+    result = registry.run(task)
+    assert result.ok is True
+    assert result.value == "https://example.com/live.png?v=8"
+    steps = result.meta.get("steps", [])
+    js_match_steps = [step for step in steps if step.get("step") == "match_js_url"]
+    assert len(js_match_steps) >= 2

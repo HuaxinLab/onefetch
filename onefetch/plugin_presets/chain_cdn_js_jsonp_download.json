@@ -1,0 +1,18 @@
+{
+  "plugin_id": "extract_html_js_jsonp",
+  "description": "Extract download URL via HTML -> CDN JS -> JSONP chain",
+  "options": {
+    "callback": "callback",
+    "field": "download_url",
+    "append_version": "false",
+    "fallback_default_image": "false",
+    "js_url_regexes": [
+      "(https?:)?//cdn\\.[^/]+/[^\"\\\\]+\\.js",
+      "(https?:)?//static\\.[^/]+/[^\"\\\\]+\\.js"
+    ],
+    "jsonp_base_regexes": [
+      "(https://[^\"\\\\]+\\.js\\?t=)",
+      "(https://[^\"\\\\]+callback=[^\"\\\\]+)"
+    ]
+  }
+}

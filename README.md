@@ -57,6 +57,30 @@ ln -s <project-root> ~/.codex/skills/onefetch
 - 场景 4：你怀疑网页已更新，想要最新内容
 : “这篇文章先刷新最新内容，再重新整理并保存：<URL>”
 
+## Plugin 能力（给普通用户）
+
+你不需要填写技术参数（如 callback/regex）。  
+直接告诉 agent 你的目标，agent 会自行判断并测试。
+
+当前可用能力（由 agent 选择执行）：
+- 页面元素提取：某个 `src/href/text`
+- JSONP 字段提取：接口回调里的某个字段
+- 链路提取：HTML -> JS -> JSONP -> 字段
+
+内置常用 preset（给 agent 复用）：
+- `template_html_js_jsonp`：模板示例，用于学习 preset 结构
+- `chain_cdn_js_jsonp_img`：偏图片 URL 提取
+- `chain_cdn_js_jsonp_download`：偏下载链接提取
+- `chain_generic_js_jsonp_value`：未知站点快速试探
+- `chain_js_only_jsonp_value`：已知 JS URL 场景
+
+建议你这样和 agent 说：
+- “帮我拿这个页面里下载按钮的链接：<URL>”
+- “这个页面里有动态图片，帮我提取最终图片 URL：<URL>”
+- “这个接口返回里我要 `img_url` 字段，帮我拿到：<URL>”
+
+如果提取失败，agent 会返回失败原因和下一步建议。
+
 ## 目录结构（Skill 规范）
 
 - `SKILL.md`

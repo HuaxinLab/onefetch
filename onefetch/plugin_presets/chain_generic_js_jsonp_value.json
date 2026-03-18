@@ -1,0 +1,17 @@
+{
+  "plugin_id": "extract_html_js_jsonp",
+  "description": "Generic chain preset for unknown sites (value field)",
+  "options": {
+    "callback": "callback",
+    "field": "value",
+    "append_version": "false",
+    "fallback_default_image": "false",
+    "js_url_regexes": [
+      "(https?:)?//[^\"\\\\]+\\.js"
+    ],
+    "jsonp_base_regexes": [
+      "(https://[^\"\\\\]+\\.js\\?t=)",
+      "(https://[^\"\\\\]+callback=[^\"\\\\]+)"
+    ]
+  }
+}

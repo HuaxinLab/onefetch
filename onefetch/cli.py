@@ -19,6 +19,7 @@ from onefetch.llm_outputs import parse_and_validate_llm_outputs
 from onefetch.models import BatchIngestReport, IngestResult
 from onefetch.pipeline import IngestionPipeline
 from onefetch.plugins import PluginTask, create_default_registry
+from onefetch.plugins.presets import load_preset
 from onefetch.router import Router
 from onefetch.storage import StorageService
 
@@ -495,6 +496,10 @@ def run_plugin(args: argparse.Namespace) -> int:
     if args.plugin_command == "run":
         try:
             options = _parse_opt_pairs(args.opt)
+            preset_name = str(options.get("preset", "")).strip()
+            if preset_name:
+                preset_options = load_preset(preset_name, plugin_id=args.plugin_id)
+                options = {**preset_options, **{k: v for k, v in options.items() if k != "preset"}}
         except ValueError as exc:
             print(str(exc))
             return 2

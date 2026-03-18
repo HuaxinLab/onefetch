@@ -1,0 +1,17 @@
+{
+  "plugin_id": "extract_html_js_jsonp",
+  "description": "Template preset for HTML -> JS -> JSONP chain extraction",
+  "options": {
+    "callback": "callback",
+    "field": "value",
+    "append_version": "false",
+    "fallback_default_image": "false",
+    "js_url_regexes": [
+      "(https?:)?//cdn\\.example\\.com/[^\"\\\\]+\\.js",
+      "(https?:)?//static\\.example\\.com/[^\"\\\\]+\\.js"
+    ],
+    "jsonp_base_regexes": [
+      "(https://api\\.example\\.com/data/[^\"\\\\]+\\.js\\?t=)"
+    ]
+  }
+}

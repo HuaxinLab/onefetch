@@ -37,3 +37,25 @@ def test_plugin_run_rejects_bad_opt_format(capsys) -> None:
 
     assert exit_code == 2
     assert "expected key=value" in out
+
+
+def test_plugin_run_with_preset_merges_options(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(
+        cli,
+        "load_preset",
+        lambda name, plugin_id: {"selector": ".wk-hero-invite-col", "attr": "text", "index": "0"},
+    )
+    exit_code = cli.main(
+        [
+            "plugin",
+            "run",
+            "extract_css_attr",
+            "--opt",
+            "preset=any_name",
+            "--opt",
+            "html=<div class='wk-hero-invite-col'>from-preset</div>",
+        ]
+    )
+    out = capsys.readouterr().out.strip()
+    assert exit_code == 0
+    assert out == "from-preset"
