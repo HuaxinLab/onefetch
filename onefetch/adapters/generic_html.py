@@ -103,8 +103,8 @@ class GenericHtmlAdapter(BaseAdapter):
         if not content:
             content = body_text[:5000]
 
-        # 所有方法都尝试过但内容仍为空或极少，可能需要登录
-        if not cookie and self._looks_like_login_required(content, body_text):
+        # 所有方法都尝试过但内容仍为空或极少，可能需要登录（Playwright 已渲染成功则不判定）
+        if not cookie and not used_browser and self._looks_like_login_required(content, body_text):
             domain = (urlparse(url).hostname or "").lower()
             raise RuntimeError(
                 f"页面内容为空或需要登录才能查看。可通过 setup_cookie.sh {domain} 配置 Cookie 后重试。"
