@@ -64,64 +64,117 @@ agent 不需要手动选择适配器，router 根据 URL 自动路由。
       - `network.timeout` → 重试
       - `route.not_found` → URL 格式有误
 
-### 何时用插件而非主流程
+### 主流程 vs 插件：如何选择
 
-13. 当用户需求是"提取某个页面字段 / 资源 URL（如 CSS 属性、JSONP 字段、下载链接）"时，优先使用 `onefetch plugin run ...`，不要走 `run_ingest.sh` 主流程。
+两种能力解决不同问题：
 
-## 插件列表与选型
+| 用户需求 | 使用 | 原因 |
+|---|---|---|
+| 读取 / 总结 / 翻译整篇文章 | 主流程（`run_ingest.sh`） | 需要完整正文 |
+| 提取页面中的特定元素（图片 URL、下载链接、某个字段） | 插件（`plugin run`） | 只需要一个值 |
+
+判断规则：
+- 用户关心的是"文章内容" → 主流程
+- 用户关心的是"某个具体的 URL / 值 / 属性" → 插件
+
+## 插件体系
+
+### 核心概念：为什么 SPA 页面不一定需要浏览器
+
+很多 SPA / JS 渲染页面虽然在浏览器里需要执行 JavaScript 才能看到内容，但数据本身往往存在于可直接 HTTP 请求的资源中：
+
+```
+用户看到的渲染页面
+  └── 浏览器执行 JS 后填充到 DOM
+
+数据的实际来源（可直接请求，不需要浏览器）：
+  HTML 页面 → 里面引用了 JS bundle URL
+    → JS bundle → 里面包含 API 地址或硬编码数据
+      → API（通常是 JSONP 格式）→ 里面包含目标值（图片 URL、下载链接等）
+```
+
+插件的链路提取就是沿这条数据链逐步追溯，用正则从每一层提取下一层的地址，最终拿到目标值。**不需要浏览器，速度快，且更稳定。**
+
+### 面对未知页面的推荐流程
+
+```
+用户说"帮我提取这个页面的 XXX"
+  │
+  ├─ 页面是服务端渲染（HTML 里有目标内容）？
+  │    → 用 extract_css_attr 按选择器提取
+  │
+  ├─ 用户已经给出了 JSONP 接口地址？
+  │    → 用 extract_jsonp_field 直接提取字段
+  │
+  ├─ 页面是 SPA / 目标值不在 HTML 中？
+  │    → 用 extract_html_js_jsonp，推荐步骤：
+  │      1. 先试 auto_detect=true 自动探测
+  │      2. 若探测成功，直接使用返回的参数
+  │      3. 若失败，用 plugin doctor 诊断，根据 suggestion 调整
+  │
+  └─ 完全不确定？
+       → 先用 extract_html_js_jsonp + auto_detect=true 探测
+         它会分析页面结构并尝试自动找到数据链路
+```
+
+### 插件列表
 
 当前可用插件（可通过 `.venv/bin/python -m onefetch.cli plugin list` 查看）：
 
-### 1. `extract_css_attr`
+#### 1. `extract_css_attr`
 
 - **作用**：从 HTML 中按 CSS 选择器提取属性或文本。
-- **适用**：用户说"给我某个元素的 src / href / text"。
+- **适用**：目标内容直接存在于 HTML 中（服务端渲染页面）。
+- **局限**：对 SPA 页面无效 — HTML 中只有空骨架（如"加载中..."），目标值不在 DOM 里。
 - **关键参数**：
   - `selector`：支持 `#id`、`.class`、`tag`、`tag.class`
   - `attr`：默认 `src`，可用 `text`
   - `index`：可选，默认 `0`
 
-### 2. `extract_jsonp_field`
+#### 2. `extract_jsonp_field`
 
 - **作用**：从 JSONP 响应提取字段值。
-- **适用**：用户说"这个接口 callback 返回里的某个字段"。
+- **适用**：已知 JSONP 接口地址，只需提取其中某个字段。
 - **关键参数**：
   - `jsonp_url`：JSONP 地址（不传则使用 `--url`）
   - `callback`：默认 `callback`
   - `field`：默认 `img_url`
 
-### 3. `extract_html_js_jsonp`
+#### 3. `extract_html_js_jsonp`（最常用）
 
-- **作用**：链路提取（HTML → JS → JSONP → 字段）。
-- **适用**：目标值不在 HTML，需要先从 HTML 定位 JS，再从 JS 找 JSONP 地址，最后取字段。
+- **作用**：链路提取（HTML → JS → JSONP → 字段），沿 SPA 的数据链逐层追溯。
+- **适用**：目标值不在 HTML 中，需要追溯到 JS bundle 或 API 中获取。这是处理 SPA 页面元素提取的首选。
 - **关键参数**：
-  - `callback`：默认 `img_url`
-  - `field`：默认 `img_url`
+  - `callback`：JSONP 回调函数名，默认 `img_url`
+  - `field`：要提取的字段名，默认 `img_url`
   - `append_version`：`true/false`，是否拼接 `?v=...`
-  - `preset`：可直接使用预设参数（如 `template_html_js_jsonp`）
-  - `js_url_regexes` / `jsonp_base_regexes`：支持多候选（数组或 `a||b`）
+  - `preset`：使用内置预设参数（推荐优先尝试）
+  - `auto_detect`：`true` 时自动分析页面结构并探测数据链路
+  - `js_url_regexes` / `jsonp_base_regexes`：自定义正则，支持多候选（数组或 `a||b`）
   - 可选直传：`html`、`js_body`、`jsonp_body`（便于调试 / 离线测试）
 
-### 插件选型规则
+### 插件选型速查
 
-| 用户需求 | 选择插件 |
-|---|---|
-| 页面 DOM 属性 / 文本提取 | `extract_css_attr` |
-| JSONP 接口字段提取 | `extract_jsonp_field` |
-| 需要"HTML → JS → 接口 → 字段"的链路 | `extract_html_js_jsonp` |
-| 不确定该用哪个 | 先用 `extract_html_js_jsonp` + `auto_detect=true` 探测 |
+| 场景 | 选择 | 示例命令 |
+|---|---|---|
+| HTML 里有目标内容 | `extract_css_attr` | `plugin run extract_css_attr --url URL --opt selector=.hero --opt attr=src` |
+| 已知 JSONP 接口地址 | `extract_jsonp_field` | `plugin run extract_jsonp_field --opt jsonp_url=URL --opt field=img_url` |
+| SPA 页面提取图片 | `extract_html_js_jsonp` + preset | `plugin run extract_html_js_jsonp --url URL --opt preset=chain_cdn_js_jsonp_img` |
+| SPA 页面提取下载链接 | `extract_html_js_jsonp` + preset | `plugin run extract_html_js_jsonp --url URL --opt preset=chain_cdn_js_jsonp_download` |
+| 未知站点，不确定结构 | `extract_html_js_jsonp` + auto_detect | `plugin run extract_html_js_jsonp --url URL --opt auto_detect=true --json` |
+| 提取失败，需要诊断 | plugin doctor | `plugin doctor extract_html_js_jsonp --url URL --opt preset=chain_generic_js_jsonp_value --json` |
 
 ### 内置 preset
 
 preset 是预配置的参数组合，agent 可直接复用，无需手动填参数：
 
-| preset 名称 | 用途 |
-|---|---|
-| `template_html_js_jsonp` | 模板示例，用于学习 preset 结构 |
-| `chain_cdn_js_jsonp_img` | 提取图片 URL |
-| `chain_cdn_js_jsonp_download` | 提取下载链接 |
-| `chain_generic_js_jsonp_value` | 未知站点快速试探 |
-| `chain_js_only_jsonp_value` | 已知 JS URL 场景 |
+| preset 名称 | 用途 | 推荐场景 |
+|---|---|---|
+| `chain_cdn_js_jsonp_img` | 提取图片 URL | 用户要提取页面中的动态图片 |
+| `chain_cdn_js_jsonp_download` | 提取下载链接 | 用户要提取页面中的下载地址 |
+| `chain_generic_js_jsonp_value` | 通用字段提取 | 未知站点，先用此 preset 试探 |
+| `chain_js_only_jsonp_value` | 已知 JS URL 场景 | 已经拿到 JS 地址，跳过 HTML 定位 |
+| `template_html_js_jsonp` | 模板示例 | 学习 preset 结构，用于编写新 preset |
 
 ## Agent 常用命令
 
