@@ -16,22 +16,26 @@ if [[ ! -d ".venv" ]]; then
   "$PYTHON_BIN" -m venv .venv
 fi
 
-source .venv/bin/activate
+VENV_PYTHON="$PROJECT_ROOT/.venv/bin/python"
+venv_pip() {
+  "$VENV_PYTHON" -m pip "$@"
+}
+
+if ! "$VENV_PYTHON" -m pip --version >/dev/null 2>&1; then
+  echo "[bootstrap] pip missing in .venv, running ensurepip"
+  "$VENV_PYTHON" -m ensurepip --upgrade
+fi
 
 echo "[bootstrap] upgrading pip"
-pip install -U pip
+venv_pip install -U pip
 
 echo "[bootstrap] installing core dependencies"
-pip install -e ".[dev]"
+venv_pip install -e ".[dev]"
 
 if [[ "${ONEFETCH_INSTALL_BROWSER:-0}" == "1" ]]; then
   echo "[bootstrap] installing browser dependencies"
-  pip install -e ".[browser]"
-  if command -v playwright >/dev/null 2>&1; then
-    playwright install chromium
-  else
-    python -m playwright install chromium
-  fi
+  venv_pip install -e ".[browser]"
+  "$VENV_PYTHON" -m playwright install chromium
 fi
 
 echo "[bootstrap] done"

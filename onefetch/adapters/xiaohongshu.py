@@ -466,7 +466,10 @@ class XiaohongshuAdapter(BaseAdapter):
             return [], {
                 "status": "failed",
                 "reason": "playwright_missing",
-                "hint": "Install with: pip install -e '.[browser]' && playwright install chromium",
+                "hint": (
+                    "Install with: .venv/bin/python -m pip install -e '.[browser]' "
+                    "&& .venv/bin/python -m playwright install chromium"
+                ),
             }
 
         cookie_header = os.getenv("ONEFETCH_XHS_COOKIE", "").strip()
