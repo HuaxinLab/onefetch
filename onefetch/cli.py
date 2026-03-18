@@ -103,6 +103,17 @@ def build_parser() -> argparse.ArgumentParser:
     plugin_presets = plugin_sub.add_parser("presets", help="List available presets")
     plugin_presets.add_argument("--json", action="store_true", help="Print JSON output")
     plugin_presets.add_argument("--plugin-id", default="", help="Optional plugin id filter")
+
+    plugin_doctor = plugin_sub.add_parser("doctor", help="Diagnose plugin execution and surface actionable hints")
+    plugin_doctor.add_argument("plugin_id", help="Plugin id to diagnose")
+    plugin_doctor.add_argument("--url", default="", help="Target URL")
+    plugin_doctor.add_argument(
+        "--opt",
+        action="append",
+        default=[],
+        help="Plugin option as key=value; can be repeated",
+    )
+    plugin_doctor.add_argument("--json", action="store_true", help="Print JSON output")
     return parser
 
 
@@ -487,6 +498,15 @@ def _parse_opt_pairs(raw_opts: list[str]) -> dict[str, str]:
     return options
 
 
+def _build_plugin_task(args: argparse.Namespace) -> PluginTask:
+    options = _parse_opt_pairs(args.opt)
+    preset_name = str(options.get("preset", "")).strip()
+    if preset_name:
+        preset_options = load_preset(preset_name, plugin_id=args.plugin_id)
+        options = {**preset_options, **{k: v for k, v in options.items() if k != "preset"}}
+    return PluginTask(plugin_id=args.plugin_id, url=args.url, options=options)
+
+
 def run_plugin(args: argparse.Namespace) -> int:
     registry = create_default_registry()
     if args.plugin_command == "list":
@@ -526,15 +546,10 @@ def run_plugin(args: argparse.Namespace) -> int:
 
     if args.plugin_command == "run":
         try:
-            options = _parse_opt_pairs(args.opt)
-            preset_name = str(options.get("preset", "")).strip()
-            if preset_name:
-                preset_options = load_preset(preset_name, plugin_id=args.plugin_id)
-                options = {**preset_options, **{k: v for k, v in options.items() if k != "preset"}}
+            task = _build_plugin_task(args)
         except ValueError as exc:
             print(str(exc))
             return 2
-        task = PluginTask(plugin_id=args.plugin_id, url=args.url, options=options)
         result = registry.run(task)
         if args.json:
             print(json.dumps(asdict(result), ensure_ascii=False, indent=2))
@@ -544,6 +559,41 @@ def run_plugin(args: argparse.Namespace) -> int:
             else:
                 print(f"ERROR: {result.error}")
         return 0 if result.ok else 1
+
+    if args.plugin_command == "doctor":
+        try:
+            task = _build_plugin_task(args)
+        except ValueError as exc:
+            print(str(exc))
+            return 2
+        result = registry.run(task)
+        diagnosis = {
+            "plugin_id": result.plugin_id,
+            "ok": result.ok,
+            "error": result.error,
+            "error_code": result.meta.get("error_code", ""),
+            "suggestion": result.meta.get("suggestion", ""),
+            "selected": result.meta.get("selected", {}),
+            "steps": result.meta.get("steps", []),
+            "value_preview": result.value[:180] if result.value else "",
+        }
+        if args.json:
+            print(json.dumps(diagnosis, ensure_ascii=False, indent=2))
+        else:
+            if diagnosis["ok"]:
+                print(f"OK {diagnosis['plugin_id']}")
+                if diagnosis["value_preview"]:
+                    print(f"value={diagnosis['value_preview']}")
+                print(f"steps={len(diagnosis['steps'])}")
+            else:
+                print(f"FAIL {diagnosis['plugin_id']}")
+                if diagnosis["error"]:
+                    print(f"error={diagnosis['error']}")
+                if diagnosis["error_code"]:
+                    print(f"error_code={diagnosis['error_code']}")
+                if diagnosis["suggestion"]:
+                    print(f"suggestion={diagnosis['suggestion']}")
+        return 0 if diagnosis["ok"] else 1
 
     print(json.dumps({"error": f"Unsupported plugin command: {args.plugin_command}"}))
     return 2

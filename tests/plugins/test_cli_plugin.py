@@ -74,3 +74,34 @@ def test_plugin_run_with_preset_merges_options(monkeypatch, capsys) -> None:
     out = capsys.readouterr().out.strip()
     assert exit_code == 0
     assert out == "from-preset"
+
+
+def test_plugin_doctor_reports_error_code_for_missing_input(capsys) -> None:
+    exit_code = cli.main(["plugin", "doctor", "extract_html_js_jsonp", "--json"])
+    out = capsys.readouterr().out
+    assert exit_code == 1
+    assert '"error_code": "E_INPUT_MISSING"' in out
+    assert "Provide --url or --opt html=<content>." in out
+
+
+def test_plugin_doctor_ok_with_inline_chain(capsys) -> None:
+    exit_code = cli.main(
+        [
+            "plugin",
+            "doctor",
+            "extract_html_js_jsonp",
+            "--opt",
+            "html=<html></html>",
+            "--opt",
+            "js_body=var a=\"https://api.example.com/data/payload.js?t=\";",
+            "--opt",
+            "jsonp_body=mycb({\"download_url\":\"https://example.com/app.pkg\"})",
+            "--opt",
+            "auto_detect=true",
+            "--json",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert exit_code == 0
+    assert '"ok": true' in out
+    assert "download_url" in out

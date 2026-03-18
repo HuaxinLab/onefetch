@@ -68,6 +68,20 @@ Preset 约定：
 - 本地私有 preset：`.secrets/plugin_presets/*.json`（不纳入 git，不随打包发布）
 - 读取优先级：`ONEFETCH_PLUGIN_PRESET_DIR` > `.secrets/plugin_presets` > `onefetch/plugin_presets`
 
+Plugin 运维命令：
+- 查看插件：`.venv/bin/python -m onefetch.cli plugin list`
+- 查看插件+预设：`.venv/bin/python -m onefetch.cli plugin list --with-presets`
+- 查看 preset 列表：`.venv/bin/python -m onefetch.cli plugin presets --plugin-id <plugin_id>`
+- 运行插件：`.venv/bin/python -m onefetch.cli plugin run <plugin_id> ...`
+- 诊断插件：`.venv/bin/python -m onefetch.cli plugin doctor <plugin_id> ... --json`
+
+`plugin doctor` 输出约定：
+- `ok`: 是否通过
+- `error`: 错误信息
+- `error_code`: 标准错误码（如 `E_INPUT_MISSING` / `E_JSONP_PARSE`）
+- `suggestion`: 下一步建议动作
+- `steps`: 诊断链路步骤（便于定位哪一步失败）
+
 ## 5. 质量门槛
 
 合并前至少满足：

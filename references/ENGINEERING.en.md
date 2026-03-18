@@ -69,6 +69,20 @@ Preset conventions:
 - local private presets: `.secrets/plugin_presets/*.json` (not tracked, not packaged)
 - loading priority: `ONEFETCH_PLUGIN_PRESET_DIR` > `.secrets/plugin_presets` > `onefetch/plugin_presets`
 
+Plugin operational commands:
+- list plugins: `.venv/bin/python -m onefetch.cli plugin list`
+- list plugins with presets: `.venv/bin/python -m onefetch.cli plugin list --with-presets`
+- list presets: `.venv/bin/python -m onefetch.cli plugin presets --plugin-id <plugin_id>`
+- run plugin: `.venv/bin/python -m onefetch.cli plugin run <plugin_id> ...`
+- diagnose plugin: `.venv/bin/python -m onefetch.cli plugin doctor <plugin_id> ... --json`
+
+`plugin doctor` output contract:
+- `ok`: pass/fail status
+- `error`: human-readable error message
+- `error_code`: normalized error code (for example `E_INPUT_MISSING` / `E_JSONP_PARSE`)
+- `suggestion`: actionable next step
+- `steps`: diagnostic trace steps for pinpointing the failed stage
+
 ## 5. Quality Gate
 
 Before merge:

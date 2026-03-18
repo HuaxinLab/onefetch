@@ -144,6 +144,12 @@ bash scripts/run_ingest.sh --present --refresh "https://zhuanlan.zhihu.com/p/...
   --url "https://example.com" \
   --opt auto_detect=true \
   --json
+
+# 失败后做诊断（返回 error_code/suggestion/steps）
+.venv/bin/python -m onefetch.cli plugin doctor extract_html_js_jsonp \
+  --url "https://example.com" \
+  --opt preset=chain_generic_js_jsonp_value \
+  --json
 ```
 
 ## 参考文档
