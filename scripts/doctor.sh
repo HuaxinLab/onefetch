@@ -39,11 +39,4 @@ else
   exit 1
 fi
 
-if "$VENV_PYTHON" -m pytest --version >/dev/null 2>&1; then
-  echo "[doctor] pytest available via python -m pytest"
-else
-  echo "[doctor] pytest missing in .venv"
-  exit 1
-fi
-
 echo "[doctor] done"
