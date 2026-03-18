@@ -103,8 +103,8 @@ class GenericHtmlAdapter(BaseAdapter):
         if not content:
             content = body_text[:5000]
 
-        # 所有方法都尝试过但内容仍为空或极少，可能需要登录（Playwright 已渲染成功则不判定）
-        if not cookie and not used_browser and self._looks_like_login_required(content, body_text):
+        # 内容为空或需要登录
+        if not cookie and self._looks_like_login_required(content, body_text, title=title):
             domain = (urlparse(url).hostname or "").lower()
             raise RuntimeError(
                 f"页面内容为空或需要登录才能查看。可通过 setup_cookie.sh {domain} 配置 Cookie 后重试。"
@@ -149,21 +149,26 @@ class GenericHtmlAdapter(BaseAdapter):
         return ""
 
     @staticmethod
-    def _looks_like_login_required(content: str, body_text: str) -> bool:
+    def _looks_like_login_required(content: str, body_text: str, *, title: str | None = None) -> bool:
         """检测页面是否需要登录才能查看内容。"""
         text = (content or "").strip()
         raw = (body_text or "").lower()
+        title_lower = (title or "").lower()
+        # 标题明确含登录/注册
+        if any(m in title_lower for m in ["登录", "注册", "login", "sign in"]):
+            return True
         # 内容极少（去噪后几乎为空）
         if len(text) < 50:
             return True
-        # 常见登录提示关键词
-        login_markers = [
-            "请登录", "请先登录", "login", "sign in", "登录后查看",
-            "需要登录", "请注册", "log in to", "身份验证",
-        ]
-        for marker in login_markers:
-            if marker in raw:
-                return True
+        # 常见登录提示关键词（仅在内容极少时检查，避免误判有正常内容的页面）
+        if len(text) < 300:
+            login_markers = [
+                "请登录", "请先登录", "登录后查看",
+                "需要登录", "请注册", "log in to",
+            ]
+            for marker in login_markers:
+                if marker in raw:
+                    return True
         return False
 
     @staticmethod
@@ -214,7 +219,7 @@ class GenericHtmlAdapter(BaseAdapter):
         if not body_text:
             return True
         normalized = body_text.lower()
-        if "enable javascript" in normalized or "please turn javascript" in normalized:
+        if "enable javascript" in normalized or "please turn javascript" in normalized or "without javascript" in normalized:
             return True
         # Chinese SPA placeholders
         for marker in ("加载中", "正在加载", "页面加载中", "数据加载中"):
@@ -257,7 +262,6 @@ class GenericHtmlAdapter(BaseAdapter):
                 )
 
                 if cookie:
-                    from urllib.parse import urlparse
                     domain = urlparse(url).hostname or ""
                     cookies = []
                     for pair in cookie.split(";"):
@@ -265,7 +269,13 @@ class GenericHtmlAdapter(BaseAdapter):
                         if "=" not in pair:
                             continue
                         name, value = pair.split("=", 1)
+                        # 同时设置精确域名和父域，确保 cookie 被正确发送
                         cookies.append({"name": name.strip(), "value": value.strip(), "domain": domain, "path": "/"})
+                        # 父域通配（如 .geekbang.org）
+                        parts = domain.split(".")
+                        if len(parts) > 2:
+                            parent = "." + ".".join(parts[-2:])
+                            cookies.append({"name": name.strip(), "value": value.strip(), "domain": parent, "path": "/"})
                     if cookies:
                         await page.context.add_cookies(cookies)
 
