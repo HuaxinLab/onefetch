@@ -47,3 +47,36 @@ def load_preset(name: str, *, plugin_id: str) -> dict[str, Any]:
     if not isinstance(options, dict):
         raise ValueError(f"invalid preset options: {name}")
     return options
+
+
+def list_presets(*, plugin_id: str = "") -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    seen_names: set[str] = set()
+
+    for source, root in [("local", _local_preset_dir()), ("builtin", _builtin_preset_dir())]:
+        if not root.exists():
+            continue
+        for path in sorted(root.glob("*.json")):
+            name = path.stem
+            if name in seen_names:
+                continue
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if not isinstance(payload, dict):
+                continue
+            preset_plugin_id = str(payload.get("plugin_id", "")).strip()
+            if plugin_id and preset_plugin_id != plugin_id:
+                continue
+            rows.append(
+                {
+                    "name": name,
+                    "plugin_id": preset_plugin_id,
+                    "description": str(payload.get("description", "")).strip(),
+                    "source": source,
+                    "path": str(path),
+                }
+            )
+            seen_names.add(name)
+    return rows

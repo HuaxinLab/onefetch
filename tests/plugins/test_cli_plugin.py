@@ -11,6 +11,21 @@ def test_plugin_list_command_outputs_builtin_plugins(capsys) -> None:
     assert "extract_jsonp_field" in out
 
 
+def test_plugin_list_with_presets_includes_names(capsys) -> None:
+    exit_code = cli.main(["plugin", "list", "--with-presets"])
+    out = capsys.readouterr().out
+    assert exit_code == 0
+    assert "presets:" in out
+    assert "chain_cdn_js_jsonp_img" in out
+
+
+def test_plugin_presets_list_json(capsys) -> None:
+    exit_code = cli.main(["plugin", "presets", "--plugin-id", "extract_html_js_jsonp", "--json"])
+    out = capsys.readouterr().out
+    assert exit_code == 0
+    assert "chain_cdn_js_jsonp_img" in out
+
+
 def test_plugin_run_css_with_inline_html(capsys) -> None:
     exit_code = cli.main(
         [

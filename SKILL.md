@@ -110,6 +110,12 @@ bash scripts/run_ingest.sh --present --refresh "https://zhuanlan.zhihu.com/p/...
 # 插件列表（独立能力，不影响 ingest）
 .venv/bin/python -m onefetch.cli plugin list
 
+# 插件 + 预设总览（带每个插件可用 preset）
+.venv/bin/python -m onefetch.cli plugin list --with-presets
+
+# 单独查看 preset 列表（可按 plugin 过滤）
+.venv/bin/python -m onefetch.cli plugin presets --plugin-id extract_html_js_jsonp
+
 # 插件运行：按 CSS 选择器提取属性/文本
 .venv/bin/python -m onefetch.cli plugin run extract_css_attr \
   --url "https://example.com" \
@@ -131,6 +137,12 @@ bash scripts/run_ingest.sh --present --refresh "https://zhuanlan.zhihu.com/p/...
 .venv/bin/python -m onefetch.cli plugin run extract_html_js_jsonp \
   --url "https://www.dingtalk.com/wukong" \
   --opt preset=chain_cdn_js_jsonp_img \
+  --json
+
+# 自动探测（callback/field/regex 未知时）
+.venv/bin/python -m onefetch.cli plugin run extract_html_js_jsonp \
+  --url "https://example.com" \
+  --opt auto_detect=true \
   --json
 ```
 

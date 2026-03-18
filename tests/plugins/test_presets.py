@@ -1,4 +1,4 @@
-from onefetch.plugins.presets import load_preset
+from onefetch.plugins.presets import list_presets, load_preset
 
 
 def test_load_builtin_preset_for_chain_plugin() -> None:
@@ -27,3 +27,9 @@ def test_local_preset_overrides_builtin(monkeypatch, tmp_path) -> None:
     options = load_preset("template_html_js_jsonp", plugin_id="extract_html_js_jsonp")
     assert options["callback"] == "local_cb"
     assert options["field"] == "local_field"
+
+
+def test_list_presets_contains_builtin_chain() -> None:
+    rows = list_presets(plugin_id="extract_html_js_jsonp")
+    names = {row["name"] for row in rows}
+    assert "chain_cdn_js_jsonp_img" in names

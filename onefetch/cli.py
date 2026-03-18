@@ -19,7 +19,7 @@ from onefetch.llm_outputs import parse_and_validate_llm_outputs
 from onefetch.models import BatchIngestReport, IngestResult
 from onefetch.pipeline import IngestionPipeline
 from onefetch.plugins import PluginTask, create_default_registry
-from onefetch.plugins.presets import load_preset
+from onefetch.plugins.presets import list_presets, load_preset
 from onefetch.router import Router
 from onefetch.storage import StorageService
 
@@ -87,6 +87,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     plugin_list = plugin_sub.add_parser("list", help="List available plugins")
     plugin_list.add_argument("--json", action="store_true", help="Print JSON output")
+    plugin_list.add_argument("--with-presets", action="store_true", help="Include preset names per plugin")
 
     plugin_run = plugin_sub.add_parser("run", help="Run one plugin")
     plugin_run.add_argument("plugin_id", help="Plugin id to execute")
@@ -98,6 +99,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Plugin option as key=value; can be repeated",
     )
     plugin_run.add_argument("--json", action="store_true", help="Print JSON output")
+
+    plugin_presets = plugin_sub.add_parser("presets", help="List available presets")
+    plugin_presets.add_argument("--json", action="store_true", help="Print JSON output")
+    plugin_presets.add_argument("--plugin-id", default="", help="Optional plugin id filter")
     return parser
 
 
@@ -485,12 +490,38 @@ def _parse_opt_pairs(raw_opts: list[str]) -> dict[str, str]:
 def run_plugin(args: argparse.Namespace) -> int:
     registry = create_default_registry()
     if args.plugin_command == "list":
-        rows = [{"id": p.id, "description": p.description} for p in registry.list_plugins()]
+        preset_map: dict[str, list[str]] = {}
+        if args.with_presets:
+            for preset in list_presets():
+                pid = preset.get("plugin_id", "")
+                if not pid:
+                    continue
+                preset_map.setdefault(pid, []).append(preset["name"])
+
+        rows = []
+        for plugin in registry.list_plugins():
+            item = {"id": plugin.id, "description": plugin.description}
+            if args.with_presets:
+                item["presets"] = sorted(preset_map.get(plugin.id, []))
+            rows.append(item)
         if args.json:
             print(json.dumps(rows, ensure_ascii=False, indent=2))
         else:
             for row in rows:
-                print(f"{row['id']}\t{row['description']}")
+                if args.with_presets:
+                    presets_text = ", ".join(row.get("presets", [])) or "-"
+                    print(f"{row['id']}\t{row['description']}\tpresets: {presets_text}")
+                else:
+                    print(f"{row['id']}\t{row['description']}")
+        return 0
+
+    if args.plugin_command == "presets":
+        rows = list_presets(plugin_id=args.plugin_id)
+        if args.json:
+            print(json.dumps(rows, ensure_ascii=False, indent=2))
+        else:
+            for row in rows:
+                print(f"{row['name']}\t{row['plugin_id']}\t{row['source']}\t{row['description']}")
         return 0
 
     if args.plugin_command == "run":
