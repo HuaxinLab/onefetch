@@ -55,7 +55,7 @@ class StorageService:
             "crawler_id": result.crawler_id,
             "title": result.title,
             "content_hash": result.content_hash,
-            "body": result.body_full or result.body_excerpt or "",
+            "body": result.body_full or "",
             "images": result.images,
             "comment_count": result.comment_count,
             "comment_source": result.comment_source,
@@ -93,7 +93,7 @@ class StorageService:
             lines.extend(["## 标签", "", ", ".join(llm.tags), ""])
 
         # Body — replace [IMG:N] with local image paths or strip them
-        body = result.body_full or result.body_excerpt or ""
+        body = result.body_full or ""
         if with_images and result.images:
             import re
             for i in range(len(result.images)):

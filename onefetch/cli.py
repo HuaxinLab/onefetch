@@ -260,7 +260,7 @@ async def _try_llm_regenerate(result) -> bool:
 
 
 def _regenerate_llm_outputs_from_rules(result) -> None:
-    body = strip_image_placeholders(result.body_full or result.body_excerpt or result.body_preview or "")
+    body = strip_image_placeholders(result.body_full or result.body_preview or "")
     if not body:
         return
     summary = _preview_text(body, limit=360)
@@ -342,7 +342,7 @@ def _print_present(report, *, with_images: bool = False) -> None:
             print(f"- retryable: {result.retryable}")
         if result.action_hint:
             print(f"- action_hint: {result.action_hint}")
-        points = _build_key_points(strip_image_placeholders(result.body_excerpt))
+        points = _build_key_points(strip_image_placeholders(result.body_full))
         if points:
             print("- key_points:")
             for point in points:

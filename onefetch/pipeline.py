@@ -45,7 +45,6 @@ class IngestionPipeline:
                         comment_count=len(feed.comments),
                         comment_source=comment_source,
                         body_preview=self._preview(_IMG_PLACEHOLDER_RE.sub("", feed.body), limit=280),
-                        body_excerpt=self._preview(_IMG_PLACEHOLDER_RE.sub("", feed.body), limit=1600),
                         body_full=(feed.body or "").strip(),
                         images=feed.images,
                         risk_controlled=risk_controlled,

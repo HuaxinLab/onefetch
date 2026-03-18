@@ -67,7 +67,6 @@ class IngestResult(BaseModel):
     comment_count: int = 0
     comment_source: str = "none"
     body_preview: str = ""
-    body_excerpt: str = ""
     body_full: str = ""
     images: list[str] = Field(default_factory=list)
     cache_path: str = ""
