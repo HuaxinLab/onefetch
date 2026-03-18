@@ -15,6 +15,7 @@
 - 模型输出默认回填（`reports/llm_output.json`，可用 `--llm-output-file` 覆盖）
 - `--store` 且结构化结果失效时，优先通过 `ONEFETCH_LLM_REGEN_CMD` 执行真实 LLM 重算，失败再规则兜底
 - cookie 一次配置与自动加载
+- 知乎 cookie 一次配置脚本（`setup_zhihu_cookie.sh`）
 - 打包与清理脚本
 
 ## 2. 开发工作流
@@ -30,6 +31,9 @@ bash scripts/doctor.sh
 1. 先写/改测试
 2. 再改 adapter 或 pipeline
 3. 本地跑回归后提交
+
+注意：
+- 测试命令统一使用 `.venv/bin/python -m pytest ...`，不要依赖 `.venv/bin/pytest` 可执行脚本（项目路径迁移后 shebang 可能失效）。
 
 ## 3. 目录职责
 
@@ -47,6 +51,17 @@ bash scripts/doctor.sh
 - 路由命中测试
 - adapter 解析测试
 - 最小 smoke（可选）
+
+## 4.1 插件扩展 SOP（独立于 ingest）
+
+插件目录：`onefetch/plugins/`
+
+新增插件步骤：
+1. 新建 `onefetch/plugins/<plugin>.py`
+2. 实现 `id/description/supports/run`
+3. 在 `onefetch/plugins/registry.py` 注册
+4. 增加测试（`tests/plugins/`）
+5. 只更新 `SKILL.md` 和工程文档；`README` 保持面向普通用户的最小说明
 
 ## 5. 质量门槛
 
@@ -66,3 +81,21 @@ bash scripts/doctor.sh
 1. 新平台 adapter（按需求）
 2. 统一内容质量评分（可读性、噪音比）
 3. 更细粒度的风险与重试策略
+
+## 7. Cookie 一次配置（复制粘贴）
+
+### 小红书评论 Cookie
+
+```bash
+bash scripts/setup_xhs_cookie.sh
+```
+
+### 知乎 Cookie（专栏 `risk.blocked` 时）
+
+```bash
+bash scripts/setup_zhihu_cookie.sh
+```
+
+说明：
+- 两个脚本都会把 Cookie 保存到 `.secrets/` 目录（默认 600 权限）。
+- `bash scripts/run_ingest.sh ...` 会自动加载已保存 Cookie，无需每次手动设置环境变量。

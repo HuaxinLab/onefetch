@@ -26,6 +26,33 @@ argument-hint: [url-or-free-text]
 9. 小红书评论默认可选；仅在用户需要评论时启用 `ONEFETCH_XHS_COMMENT_MODE='state+api'`。
 10. 若用户未配置评论 Cookie，agent 需引导用户完成插件导出并执行 `bash scripts/setup_xhs_cookie.sh` 粘贴一次。
 11. 报错时按可恢复性处理：可重试错误先重试一次，再给用户建议。
+12. 知乎专栏若出现 `risk.blocked`，引导用户执行 `bash scripts/setup_zhihu_cookie.sh` 粘贴 Cookie 后重试。
+13. 当用户是“提取某个页面字段/资源 URL（如 css 属性、jsonp 字段）”这类需求时，优先使用 `onefetch plugin run ...`，不要走 `run_ingest.sh` 主流程。
+
+## 插件列表与选型
+
+当前可用插件（可通过 `.venv/bin/python -m onefetch.cli plugin list` 查看）：
+
+1. `extract_css_attr`
+- 作用：从 HTML 中按简单 CSS 选择器提取属性或文本。
+- 适用：用户说“给我某个元素的 src/href/text”。
+- 关键参数：
+  - `selector`：支持 `#id`、`.class`、`tag`、`tag.class`
+  - `attr`：默认 `src`，可用 `text`
+  - `index`：可选，默认 `0`
+
+2. `extract_jsonp_field`
+- 作用：从 JSONP 响应提取字段值。
+- 适用：用户说“这个接口 callback 返回里的某个字段”。
+- 关键参数：
+  - `jsonp_url`：JSONP 地址（不传则使用 `--url`）
+  - `callback`：默认 `callback`
+  - `field`：默认 `img_url`
+
+选型规则：
+- 页面 DOM 属性/文本提取：优先 `extract_css_attr`
+- JSONP 字段提取：优先 `extract_jsonp_field`
+- 需要“先抓 HTML 再追 JS/接口再提取”的链路：当前插件不足，先用脚本方案，并在回复里说明可新增插件能力
 
 ## Agent 常用命令
 
@@ -57,6 +84,25 @@ bash scripts/run_ingest.sh --list-crawlers
 bash scripts/setup_xhs_cookie.sh
 ONEFETCH_XHS_COMMENT_MODE='state+api' \
   bash scripts/run_ingest.sh "https://www.xiaohongshu.com/explore/..."
+
+# 知乎专栏被风控时，一次配置 Cookie 后重试
+bash scripts/setup_zhihu_cookie.sh
+bash scripts/run_ingest.sh --present --refresh "https://zhuanlan.zhihu.com/p/..."
+
+# 插件列表（独立能力，不影响 ingest）
+.venv/bin/python -m onefetch.cli plugin list
+
+# 插件运行：按 CSS 选择器提取属性/文本
+.venv/bin/python -m onefetch.cli plugin run extract_css_attr \
+  --url "https://example.com" \
+  --opt selector=.hero \
+  --opt attr=src
+
+# 插件运行：从 JSONP 中提取字段
+.venv/bin/python -m onefetch.cli plugin run extract_jsonp_field \
+  --opt jsonp_url="https://example.com/api.js?callback=img_url" \
+  --opt callback=img_url \
+  --opt field=img_url
 ```
 
 ## 参考文档

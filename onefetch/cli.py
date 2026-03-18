@@ -8,6 +8,7 @@ import re
 import shlex
 import time
 from collections import Counter
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from onefetch.config import OneFetchConfig
 from onefetch.llm_outputs import parse_and_validate_llm_outputs
 from onefetch.models import BatchIngestReport, IngestResult
 from onefetch.pipeline import IngestionPipeline
+from onefetch.plugins import PluginTask, create_default_registry
 from onefetch.router import Router
 from onefetch.storage import StorageService
 
@@ -78,6 +80,23 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ingest.add_argument("--store", action="store_true", help="Persist artifacts to data/ and catalog")
     ingest.add_argument("--present", action="store_true", help="Print normalized presentation blocks for LLM summarization")
+
+    plugin = sub.add_parser("plugin", help="Run independent plugins")
+    plugin_sub = plugin.add_subparsers(dest="plugin_command", required=True)
+
+    plugin_list = plugin_sub.add_parser("list", help="List available plugins")
+    plugin_list.add_argument("--json", action="store_true", help="Print JSON output")
+
+    plugin_run = plugin_sub.add_parser("run", help="Run one plugin")
+    plugin_run.add_argument("plugin_id", help="Plugin id to execute")
+    plugin_run.add_argument("--url", default="", help="Target URL")
+    plugin_run.add_argument(
+        "--opt",
+        action="append",
+        default=[],
+        help="Plugin option as key=value; can be repeated",
+    )
+    plugin_run.add_argument("--json", action="store_true", help="Print JSON output")
     return parser
 
 
@@ -449,12 +468,59 @@ def _count_result_statuses(report: BatchIngestReport) -> tuple[int, int, int, in
     return fetched, stored, duplicate, failed
 
 
+def _parse_opt_pairs(raw_opts: list[str]) -> dict[str, str]:
+    options: dict[str, str] = {}
+    for item in raw_opts:
+        if "=" not in item:
+            raise ValueError(f"Invalid --opt value '{item}', expected key=value")
+        key, value = item.split("=", 1)
+        key = key.strip()
+        if not key:
+            raise ValueError(f"Invalid --opt value '{item}', empty key")
+        options[key] = value
+    return options
+
+
+def run_plugin(args: argparse.Namespace) -> int:
+    registry = create_default_registry()
+    if args.plugin_command == "list":
+        rows = [{"id": p.id, "description": p.description} for p in registry.list_plugins()]
+        if args.json:
+            print(json.dumps(rows, ensure_ascii=False, indent=2))
+        else:
+            for row in rows:
+                print(f"{row['id']}\t{row['description']}")
+        return 0
+
+    if args.plugin_command == "run":
+        try:
+            options = _parse_opt_pairs(args.opt)
+        except ValueError as exc:
+            print(str(exc))
+            return 2
+        task = PluginTask(plugin_id=args.plugin_id, url=args.url, options=options)
+        result = registry.run(task)
+        if args.json:
+            print(json.dumps(asdict(result), ensure_ascii=False, indent=2))
+        else:
+            if result.ok:
+                print(result.value)
+            else:
+                print(f"ERROR: {result.error}")
+        return 0 if result.ok else 1
+
+    print(json.dumps({"error": f"Unsupported plugin command: {args.plugin_command}"}))
+    return 2
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
     if args.command == "ingest":
         return asyncio.run(run_ingest(args))
+    if args.command == "plugin":
+        return run_plugin(args)
 
     print(json.dumps({"error": f"Unsupported command: {args.command}"}))
     return 2

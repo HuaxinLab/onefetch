@@ -12,9 +12,13 @@ if [[ ! -d ".venv" ]]; then
   exit 1
 fi
 
-source .venv/bin/activate
+VENV_PYTHON="$PROJECT_ROOT/.venv/bin/python"
+if [[ ! -x "$VENV_PYTHON" ]]; then
+  echo "[doctor] missing executable: $VENV_PYTHON"
+  exit 1
+fi
 
-python - <<'PY'
+"$VENV_PYTHON" - <<'PY'
 import importlib
 import sys
 
@@ -28,10 +32,17 @@ for mod in ["httpx", "pydantic", "lxml", "truststore"]:
         raise
 PY
 
-if command -v onefetch >/dev/null 2>&1; then
+if "$VENV_PYTHON" -m onefetch.cli --help >/dev/null 2>&1; then
   echo "[doctor] onefetch CLI available"
 else
   echo "[doctor] onefetch CLI missing"
+  exit 1
+fi
+
+if "$VENV_PYTHON" -m pytest --version >/dev/null 2>&1; then
+  echo "[doctor] pytest available via python -m pytest"
+else
+  echo "[doctor] pytest missing in .venv"
   exit 1
 fi
 
