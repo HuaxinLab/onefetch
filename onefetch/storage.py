@@ -31,16 +31,16 @@ class StorageService:
                     return record
         return None
 
-    def store_result(self, result: IngestResult) -> tuple[str, str]:
-        """Store an IngestResult to data/. Returns (feed_path, note_path)."""
+    def store_result(self, result: IngestResult) -> tuple[str, str, bool]:
+        """Store an IngestResult to data/. Returns (feed_path, note_path, is_duplicate)."""
         duplicate = self.find_duplicate(result.canonical_url, result.content_hash)
         if duplicate:
-            return duplicate.get("feed_path", ""), duplicate.get("note_path", "")
+            return duplicate.get("feed_path", ""), duplicate.get("note_path", ""), True
 
         feed_path = self._save_feed(result)
         note_path = self._save_note(result)
         self._append_catalog(result, feed_path, note_path)
-        return feed_path, note_path
+        return feed_path, note_path, False
 
     def _save_feed(self, result: IngestResult) -> str:
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")

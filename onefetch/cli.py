@@ -420,10 +420,10 @@ async def run_ingest(args: argparse.Namespace) -> int:
         for result in report.results:
             if result.status == "failed":
                 continue
-            feed_path, note_path = storage.store_result(result)
+            feed_path, note_path, is_dup = storage.store_result(result)
             result.feed_path = feed_path
             result.note_path = note_path
-            result.status = "stored" if feed_path else "duplicate"
+            result.status = "duplicate" if is_dup else "stored"
 
     summary = _build_run_summary(report, duration_sec=duration)
     _write_report_files(summary, json_path=args.report_json, md_path=args.report_md)

@@ -21,9 +21,10 @@ def test_storage_store_and_duplicate_lookup(tmp_path: Path) -> None:
         llm_outputs_state="ok",
     )
 
-    feed_path, note_path = storage.store_result(result)
+    feed_path, note_path, is_dup = storage.store_result(result)
     assert feed_path.endswith(".json")
     assert note_path.endswith(".md")
+    assert is_dup is False
 
     # Read note and verify LLM outputs are included
     note_content = Path(note_path).read_text(encoding="utf-8")
@@ -43,9 +44,10 @@ def test_storage_store_and_duplicate_lookup(tmp_path: Path) -> None:
     assert dup["feed_path"] == feed_path
 
     # Second store should return existing paths (duplicate)
-    feed_path2, note_path2 = storage.store_result(result)
+    feed_path2, note_path2, is_dup2 = storage.store_result(result)
     assert feed_path2 == feed_path
     assert note_path2 == note_path
+    assert is_dup2 is True
 
 
 def test_storage_note_labels_heuristic_source(tmp_path: Path) -> None:
@@ -67,6 +69,6 @@ def test_storage_note_labels_heuristic_source(tmp_path: Path) -> None:
         llm_outputs_state="ok",
     )
 
-    _, note_path = storage.store_result(result)
+    _, note_path, _ = storage.store_result(result)
     note_content = Path(note_path).read_text(encoding="utf-8")
     assert "规则自动提取" in note_content
