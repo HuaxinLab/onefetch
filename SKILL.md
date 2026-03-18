@@ -131,8 +131,11 @@ agent 不需要手动选择适配器，router 根据 URL 自动路由。
    - **F12 DevTools**：Network → 点击任意请求 → Headers → 复制 `Cookie:` 的值
    - **浏览器插件**：Cookie-Editor（导出选 Header String）、Get cookies.txt 等
 3. 复制 Cookie 后，直接运行脚本（会自动读取剪贴板）：
-   - 知乎：`bash scripts/setup_cookie.sh zhihu`
-   - 小红书：`bash scripts/setup_cookie.sh xhs`
+   - 知乎专栏：`bash scripts/setup_cookie.sh zhihu`
+   - 小红书评论：`bash scripts/setup_cookie.sh xhs`
+   - 任意其他网站：`bash scripts/setup_cookie.sh <域名>`（如 `bash scripts/setup_cookie.sh example.com`）
+
+   配置后 cookie 保存在 `.secrets/<域名>_cookie.txt`，后续访问该域名时自动加载，无需额外参数。
 
 注意：Cookie 格式必须是 **Header String**（`key=value; key=value; ...`），不能是 Netscape/curl 格式。
 
@@ -143,7 +146,8 @@ agent 不需要手动选择适配器，router 根据 URL 自动路由。
     - `action_hint` 非空：包含可直接执行的修复命令（如安装依赖），agent 应尝试自动执行。
     - 常见错误码速查：
       - `dep.playwright_missing` → 安装 Playwright（见 action_hint）
-      - `risk.blocked` → 配置对应平台 Cookie
+      - `auth.cookie_required` → 页面需要登录，按 `action_hint` 中的命令引导用户配置 Cookie
+      - `risk.blocked` → 平台风控拦截，配置 Cookie 后重试
       - `network.timeout` → 重试
       - `route.not_found` → URL 格式有误
 

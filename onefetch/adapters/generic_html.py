@@ -4,6 +4,8 @@ import asyncio
 import os
 import re
 from datetime import datetime
+from pathlib import Path
+from urllib.parse import urlparse
 
 from lxml import html
 
@@ -29,10 +31,14 @@ class GenericHtmlAdapter(BaseAdapter):
         body_text = ""
         used_browser = False
         images: list[str] = []
+        cookie = self._load_cookie(url)
 
         if mode != "browser":
             try:
-                async with create_async_client(timeout=30, follow_redirects=True) as client:
+                request_headers = {}
+                if cookie:
+                    request_headers["cookie"] = cookie
+                async with create_async_client(timeout=30, follow_redirects=True, headers=request_headers) as client:
                     response = await client.get(url)
                     response.raise_for_status()
                 final_url = str(response.url)
@@ -63,7 +69,7 @@ class GenericHtmlAdapter(BaseAdapter):
         browser_status: dict[str, str] = {"status": "skipped", "reason": "not_needed"}
 
         if should_try_browser:
-            rendered_html, rendered_url, render_state = await self._render_with_browser(final_url if body_text else url)
+            rendered_html, rendered_url, render_state = await self._render_with_browser(final_url if body_text else url, cookie=cookie)
             browser_status = render_state
             if rendered_html:
                 used_browser = True
@@ -97,6 +103,13 @@ class GenericHtmlAdapter(BaseAdapter):
         if not content:
             content = body_text[:5000]
 
+        # 所有方法都尝试过但内容仍为空或极少，可能需要登录
+        if not cookie and self._looks_like_login_required(content, body_text):
+            domain = (urlparse(url).hostname or "").lower()
+            raise RuntimeError(
+                f"页面内容为空或需要登录才能查看。可通过 setup_cookie.sh {domain} 配置 Cookie 后重试。"
+            )
+
         canonical = normalize_url(final_url)
         return FeedEntry(
             source_url=url,
@@ -114,6 +127,49 @@ class GenericHtmlAdapter(BaseAdapter):
                 "browser": browser_status,
             },
         )
+
+    @staticmethod
+    def _load_cookie(url: str) -> str:
+        """Load cookie from .secrets/<domain>_cookie.txt if exists."""
+        # 先检查环境变量
+        cookie = os.getenv("ONEFETCH_COOKIE", "").strip()
+        if cookie:
+            return cookie
+        # 按域名查找 cookie 文件
+        domain = (urlparse(url).hostname or "").lower()
+        if not domain:
+            return ""
+        project_root = Path(os.getenv("ONEFETCH_PROJECT_ROOT", ".")).resolve()
+        secrets_dir = project_root / ".secrets"
+        if not secrets_dir.is_dir():
+            return ""
+        cookie_file = secrets_dir / f"{domain}_cookie.txt"
+        if cookie_file.is_file():
+            return cookie_file.read_text(encoding="utf-8").strip()
+        # 尝试去掉 www. 前缀
+        if domain.startswith("www."):
+            cookie_file = secrets_dir / f"{domain[4:]}_cookie.txt"
+            if cookie_file.is_file():
+                return cookie_file.read_text(encoding="utf-8").strip()
+        return ""
+
+    @staticmethod
+    def _looks_like_login_required(content: str, body_text: str) -> bool:
+        """检测页面是否需要登录才能查看内容。"""
+        text = (content or "").strip()
+        raw = (body_text or "").lower()
+        # 内容极少（去噪后几乎为空）
+        if len(text) < 50:
+            return True
+        # 常见登录提示关键词
+        login_markers = [
+            "请登录", "请先登录", "login", "sign in", "登录后查看",
+            "需要登录", "请注册", "log in to", "身份验证",
+        ]
+        for marker in login_markers:
+            if marker in raw:
+                return True
+        return False
 
     @staticmethod
     def _render_mode() -> str:
@@ -179,7 +235,7 @@ class GenericHtmlAdapter(BaseAdapter):
         return len(content or "") < 160
 
     @staticmethod
-    async def _render_with_browser(url: str) -> tuple[str | None, str, dict[str, str]]:
+    async def _render_with_browser(url: str, *, cookie: str = "") -> tuple[str | None, str, dict[str, str]]:
         try:
             from playwright.async_api import async_playwright
         except Exception:
@@ -204,6 +260,19 @@ class GenericHtmlAdapter(BaseAdapter):
                     ),
                     viewport={"width": 1280, "height": 800},
                 )
+
+                if cookie:
+                    from urllib.parse import urlparse
+                    domain = urlparse(url).hostname or ""
+                    cookies = []
+                    for pair in cookie.split(";"):
+                        pair = pair.strip()
+                        if "=" not in pair:
+                            continue
+                        name, value = pair.split("=", 1)
+                        cookies.append({"name": name.strip(), "value": value.strip(), "domain": domain, "path": "/"})
+                    if cookies:
+                        await page.context.add_cookies(cookies)
 
                 await page.add_init_script(
                     """

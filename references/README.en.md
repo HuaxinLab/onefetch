@@ -80,15 +80,22 @@ After installation, tell the agent:
 **Scenario 8: Analyze text and images together**
 > "Analyze the text and images in this article" (agent sends both to a multimodal model)
 
+**Scenario 9: Login-required websites**
+> "This site requires login, help me set up Cookie."
+>
+> The agent will guide you to configure a Cookie for that site. Subsequent visits will automatically use the login session.
+
 ### Cookie Setup
 
-Some platforms (Zhihu columns, Xiaohongshu comments) require a one-time Cookie configuration:
+Some platforms and login-required sites need a one-time Cookie configuration:
 
 1. Log in to the platform in your browser
 2. Get the Cookie (choose one method):
    - **F12 DevTools**: Network tab → click any request → Headers → copy the `Cookie:` value
    - **Browser extension**: Cookie-Editor (export as Header String), Get cookies.txt, etc.
 3. Copy the Cookie, then run the setup script (it reads from clipboard automatically, just press Enter to confirm)
+   - Built-in platforms: `bash scripts/setup_cookie.sh zhihu` or `xhs`
+   - Any website: `bash scripts/setup_cookie.sh example.com` (use the domain name)
 
 > Note: Cookie must be in **Header String** format (`key=value; key=value; ...`), NOT Netscape/curl format.
 

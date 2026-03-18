@@ -2,6 +2,7 @@
 set -euo pipefail
 
 PROJECT_ROOT="${ONEFETCH_PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+export ONEFETCH_PROJECT_ROOT="$PROJECT_ROOT"
 XHS_COOKIE_FILE="${ONEFETCH_XHS_COOKIE_FILE:-$PROJECT_ROOT/.secrets/xhs_cookie.txt}"
 ZHIHU_COOKIE_FILE="${ONEFETCH_ZHIHU_COOKIE_FILE:-$PROJECT_ROOT/.secrets/zhihu_cookie.txt}"
 

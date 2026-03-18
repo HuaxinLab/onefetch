@@ -100,6 +100,12 @@ class IngestionPipeline:
                 False,
                 "pip install 'onefetch[browser]' && python -m playwright install chromium",
             )
+        if "setup_cookie.sh" in message:
+            # 从错误信息中提取 action_hint（包含 setup_cookie.sh 命令）
+            import re
+            m = re.search(r"(setup_cookie\.sh\s+\S+)", str(exc))
+            hint = f"bash scripts/{m.group(1)}" if m else "bash scripts/setup_cookie.sh <域名>"
+            return "auth.cookie_required", "auth", False, hint
         if "risk" in message or "captcha" in message or "风控" in message:
             return "risk.blocked", "risk", True, ""
         if "parse" in message or "json" in message:

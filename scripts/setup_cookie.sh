@@ -6,6 +6,14 @@ PROJECT_ROOT="${ONEFETCH_PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 
 # --- Platform config ---
 platform="${1:-}"
 
+if [[ -z "$platform" ]]; then
+  echo "Usage: bash scripts/setup_cookie.sh <platform|domain>"
+  echo ""
+  echo "内置平台: zhihu, xhs"
+  echo "任意域名: bash scripts/setup_cookie.sh example.com"
+  exit 1
+fi
+
 case "$platform" in
   zhihu)
     cookie_file="zhihu_cookie.txt"
@@ -16,9 +24,9 @@ case "$platform" in
     run_hint="ONEFETCH_XHS_COMMENT_MODE='state+api' bash scripts/run_cli.sh ingest '<xhs-url>'"
     ;;
   *)
-    echo "Usage: bash scripts/setup_cookie.sh <platform>"
-    echo "Supported platforms: zhihu, xhs"
-    exit 1
+    # 任意域名
+    cookie_file="${platform}_cookie.txt"
+    run_hint="bash scripts/run_cli.sh ingest --present '<${platform}-url>'"
     ;;
 esac
 
