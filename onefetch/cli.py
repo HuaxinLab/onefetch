@@ -356,9 +356,12 @@ def _print_present(report, *, with_images: bool = False) -> None:
             print(body_output)
             print("```")
         if with_images and result.images:
+            import urllib.parse
             print("- images:")
             for i, img_url in enumerate(result.images, 1):
+                proxy_url = f"https://wsrv.nl/?url={urllib.parse.quote(img_url, safe='')}"
                 print(f"  - [IMG:{i}]: {img_url}")
+                print(f"    proxy: {proxy_url}")
         if result.llm_outputs.summary:
             print(f"- llm_summary: {result.llm_outputs.summary}")
         print(f"- llm_outputs_state: {result.llm_outputs_state}")
@@ -475,9 +478,11 @@ async def run_ingest(args: argparse.Namespace) -> int:
         for result in report.results:
             if result.status == "failed":
                 continue
-            article_dir, is_dup = storage.store_result(result, with_images=with_images)
+            article_dir, is_dup, img_failures = storage.store_result(result, with_images=with_images)
             result.feed_path = article_dir
             result.status = "duplicate" if is_dup else "stored"
+            for msg in img_failures:
+                print(f"  warning: {msg}")
 
     summary = _build_run_summary(report, duration_sec=duration)
     _write_report_files(summary, json_path=args.report_json, md_path=args.report_md)
@@ -720,19 +725,30 @@ async def run_images(args: argparse.Namespace) -> int:
 
 
 async def _download_image(url: str, output_dir: Path, *, index: int) -> None:
-    try:
-        from onefetch.http import create_async_client
-        async with create_async_client(timeout=30, follow_redirects=True) as client:
-            response = await client.get(url)
-            response.raise_for_status()
-        ct = response.headers.get("content-type", "image/jpeg")
-        ext = ".webp" if "webp" in ct else ".png" if "png" in ct else ".gif" if "gif" in ct else ".jpg"
-        filename = f"{index:03d}{ext}"
-        path = output_dir / filename
-        path.write_bytes(response.content)
-        print(f"  saved: {path} ({len(response.content)} bytes)")
-    except Exception as exc:
-        print(f"  download failed: {url} — {exc}")
+    import urllib.parse
+    from onefetch.http import create_async_client
+
+    async def _try_fetch(target_url: str) -> tuple[bytes | None, str]:
+        try:
+            async with create_async_client(timeout=30, follow_redirects=True) as client:
+                response = await client.get(target_url)
+                response.raise_for_status()
+            return response.content, response.headers.get("content-type", "image/jpeg")
+        except Exception:
+            return None, ""
+
+    data, ct = await _try_fetch(url)
+    if data is None:
+        proxy_url = f"https://wsrv.nl/?url={urllib.parse.quote(url, safe='')}"
+        data, ct = await _try_fetch(proxy_url)
+    if data is None:
+        print(f"  download failed (direct + wsrv.nl): {url}")
+        return
+    ext = ".webp" if "webp" in ct else ".png" if "png" in ct else ".gif" if "gif" in ct else ".jpg"
+    filename = f"{index:03d}{ext}"
+    path = output_dir / filename
+    path.write_bytes(data)
+    print(f"  saved: {path} ({len(data)} bytes)")
 
 
 def main(argv: list[str] | None = None) -> int:

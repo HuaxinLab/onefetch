@@ -78,7 +78,7 @@ agent 不需要手动选择适配器，router 根据 URL 自动路由。
     ```bash
     bash scripts/run_cli.sh ingest --present --with-images --from-cache "URL"
     ```
-    输出中 body 会保留 `[IMG:N]` 标记表示图片原始位置，同时列出图片 URL：
+    输出中 body 保留 `[IMG:N]` 标记表示图片原始位置，同时列出每张图片的原始 URL 和 wsrv.nl 代理 URL：
     ```
     - full_body:
     ...文字内容...
@@ -87,16 +87,22 @@ agent 不需要手动选择适配器，router 根据 URL 自动路由。
     [IMG:2]
     ...
     - images:
-      - [IMG:1]: https://...
-      - [IMG:2]: https://...
+      - [IMG:1]: https://原始URL
+        proxy: https://wsrv.nl/?url=...
+      - [IMG:2]: https://原始URL
+        proxy: https://wsrv.nl/?url=...
     ```
-    **占位符说明：** `[IMG:N]` 是图片在原文中的位置标记，N 对应 images 列表的序号（`[IMG:1]` 对应第 1 张图片 URL）。agent 使用时需要理解：
-    - body 中的 `[IMG:N]` 表示"原文此处有一张图片"
-    - images 列表中 `[IMG:N]: URL` 提供该图片的实际地址
-    - 将 body 文本 + 图片 URL 一起交给多模态模型时，需告知模型 `[IMG:N]` 与对应 URL 的关系
-    - 生成摘要/要点时，不要把 `[IMG:N]` 当成正文内容，它只是位置标记
 
-    **注意：** 默认输出（不带 `--with-images`）的 body 中不含占位符，是干净的纯文本。占位符只在 `--with-images` 模式下出现。
+    **占位符说明：**
+    - `[IMG:N]` 是图片在原文中的位置标记，N 对应 images 列表的序号
+    - 默认输出（不带 `--with-images`）的 body 中不含占位符，是干净的纯文本
+    - 生成摘要/要点时，不要把 `[IMG:N]` 当成正文内容
+
+    **给多模态模型分析图片时：**
+    - 优先使用原始 URL 让模型直接访问
+    - 如果原始 URL 不可访问（防盗链），改用 proxy URL
+    - 如果两个 URL 都不可访问，告知用户"该图片无法查看"，仅根据正文整理
+    - 将 body 文本 + 图片一起交给模型时，需告知模型 `[IMG:N]` 标记处对应哪张图片
 
 ### 获取原始 HTML（--raw）
 

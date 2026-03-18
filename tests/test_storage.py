@@ -21,7 +21,7 @@ def test_storage_store_and_duplicate_lookup(tmp_path: Path) -> None:
         llm_outputs_state="ok",
     )
 
-    article_dir, is_dup = storage.store_result(result)
+    article_dir, is_dup, _ = storage.store_result(result)
     assert is_dup is False
     article_path = Path(article_dir)
     assert (article_path / "feed.json").exists()
@@ -45,7 +45,7 @@ def test_storage_store_and_duplicate_lookup(tmp_path: Path) -> None:
     assert dup["article_dir"] == article_dir
 
     # Second store should return existing dir (duplicate)
-    article_dir2, is_dup2 = storage.store_result(result)
+    article_dir2, is_dup2, _ = storage.store_result(result)
     assert article_dir2 == article_dir
     assert is_dup2 is True
 
@@ -69,7 +69,7 @@ def test_storage_note_labels_heuristic_source(tmp_path: Path) -> None:
         llm_outputs_state="ok",
     )
 
-    article_dir, _ = storage.store_result(result)
+    article_dir, _, _ = storage.store_result(result)
     note_content = (Path(article_dir) / "note.md").read_text(encoding="utf-8")
     assert "规则自动提取" in note_content
 
@@ -91,7 +91,7 @@ def test_storage_with_images(tmp_path: Path) -> None:
     )
 
     # Without --with-images: no images dir
-    article_dir, _ = storage.store_result(result, with_images=False)
+    article_dir, _, _ = storage.store_result(result, with_images=False)
     assert not (Path(article_dir) / "images").exists()
     note_content = (Path(article_dir) / "note.md").read_text(encoding="utf-8")
     assert "## 图片" not in note_content
