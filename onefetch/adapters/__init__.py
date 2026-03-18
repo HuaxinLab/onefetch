@@ -1,3 +1,4 @@
+from onefetch.adapters.bilibili import BilibiliAdapter
 from onefetch.adapters.generic_html import GenericHtmlAdapter
 from onefetch.adapters.zhihu import ZhihuAdapter
 from onefetch.adapters.wechat import WechatAdapter
@@ -11,6 +12,7 @@ def create_default_adapters() -> list[BaseAdapter]:
 
 __all__ = [
     "BaseAdapter",
+    "BilibiliAdapter",
     "GenericHtmlAdapter",
     "ZhihuAdapter",
     "WechatAdapter",

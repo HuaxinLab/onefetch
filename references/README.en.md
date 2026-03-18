@@ -6,6 +6,7 @@ OneFetch is an agent-facing web reading skill. Supported sources:
 - Xiaohongshu (posts + optional comments)
 - WeChat Official Account articles
 - Zhihu (column articles + Q&A)
+- Bilibili (video subtitle extraction + column articles)
 - Generic web pages (including SPA / JS-rendered pages)
 
 Default use case: fetch cleaned body text and let the LLM summarize.
@@ -45,6 +46,7 @@ After installation, tell the agent:
 | Xiaohongshu | "Read this Xiaohongshu post: <URL>" |
 | WeChat | "Summarize this WeChat article: <URL>" |
 | Zhihu | "Read this Zhihu column post: <URL>", "Summarize this Zhihu Q&A: <URL>" |
+| Bilibili | "Summarize this Bilibili video: <URL>", "Read this Bilibili article: <URL>" |
 | Other pages | "Read this page and summarize in 3 points: <URL>" |
 
 > For SPA / JS-rendered pages (React, Vue, Next.js sites, etc.), OneFetch automatically attempts browser rendering. The agent will install the required browser components on first use.
@@ -87,7 +89,7 @@ After installation, tell the agent:
 
 ### Cookie Setup
 
-Some platforms and login-required sites need a one-time Cookie configuration:
+Some platforms and login-required sites need a one-time Cookie configuration (Bilibili video subtitles, Zhihu columns, Xiaohongshu comments, etc.):
 
 1. Log in to the platform in your browser
 2. Get the Cookie (choose one method):

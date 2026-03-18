@@ -29,6 +29,8 @@ OneFetch/
     adapters/
       xiaohongshu.py
       wechat.py
+      zhihu.py
+      bilibili.py
       generic_html.py
   references/
   tests/

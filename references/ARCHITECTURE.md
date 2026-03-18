@@ -29,6 +29,8 @@ OneFetch/
     adapters/
       xiaohongshu.py      # 小红书适配器
       wechat.py           # 微信公众号适配器
+      zhihu.py            # 知乎适配器
+      bilibili.py         # B 站适配器（视频字幕 + 专栏）
       generic_html.py     # 通用网页适配器
   references/             # 文档
   tests/                  # 回归测试
