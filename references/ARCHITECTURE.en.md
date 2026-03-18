@@ -16,7 +16,7 @@ OneFetch/
     bootstrap.sh
     doctor.sh
     run_ingest.sh
-    setup_xhs_cookie.sh
+    setup_cookie.sh
     clean.sh
     pack.sh
   onefetch/

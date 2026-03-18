@@ -62,8 +62,8 @@ agent 不需要手动选择适配器，router 根据 URL 自动路由。
    - **F12 DevTools**：Network → 点击任意请求 → Headers → 复制 `Cookie:` 的值
    - **浏览器插件**：Cookie-Editor（导出选 Header String）、Get cookies.txt 等
 3. 复制 Cookie 后，直接运行脚本（会自动读取剪贴板）：
-   - 知乎：`bash scripts/setup_zhihu_cookie.sh`
-   - 小红书：`bash scripts/setup_xhs_cookie.sh`
+   - 知乎：`bash scripts/setup_cookie.sh zhihu`
+   - 小红书：`bash scripts/setup_cookie.sh xhs`
 
 注意：Cookie 格式必须是 **Header String**（`key=value; key=value; ...`），不能是 Netscape/curl 格式。
 
@@ -214,12 +214,12 @@ bash scripts/run_ingest.sh --present --from-cache \
 bash scripts/run_ingest.sh --list-crawlers
 
 # 小红书评论（可选，需先配置 Cookie）
-bash scripts/setup_xhs_cookie.sh
+bash scripts/setup_cookie.sh xhs
 ONEFETCH_XHS_COMMENT_MODE='state+api' \
   bash scripts/run_ingest.sh "https://www.xiaohongshu.com/explore/..."
 
 # 知乎被风控时，配置 Cookie 后重试
-bash scripts/setup_zhihu_cookie.sh
+bash scripts/setup_cookie.sh zhihu
 bash scripts/run_ingest.sh --present --refresh "https://zhuanlan.zhihu.com/p/..."
 
 # 安装浏览器渲染组件（SPA/JS 页面需要）

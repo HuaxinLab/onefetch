@@ -16,7 +16,7 @@ OneFetch/
     bootstrap.sh          # 环境初始化
     doctor.sh             # 依赖与运行检查
     run_ingest.sh         # 统一执行入口
-    setup_xhs_cookie.sh   # 小红书评论 cookie 一次配置
+    setup_cookie.sh       # 统一 cookie 配置（支持 zhihu/xhs）
     clean.sh              # 清理缓存/产物（带确认）
     pack.sh               # 打包分享（排除运行产物）
   onefetch/
