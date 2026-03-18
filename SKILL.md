@@ -115,7 +115,7 @@ agent 不需要手动选择适配器，router 根据 URL 自动路由。
 ### 平台特殊处理
 
 10. **小红书评论**：默认不抓取评论。仅在用户需要评论时启用 `ONEFETCH_XHS_COMMENT_MODE='state+api'`。若用户未配置评论 Cookie，引导用户配置（见下方 Cookie 配置说明）。
-11. **知乎风控**：若出现 `error_code=risk.blocked`，引导用户配置知乎 Cookie 后重试（见下方 Cookie 配置说明）。
+11. **知乎 Cookie**：知乎问答页面和回答页面无需 Cookie（自动通过 Playwright 渲染获取）。知乎专栏（`zhuanlan.zhihu.com`）需要 Cookie，若出现 `error_code=risk.blocked`，引导用户配置（见下方 Cookie 配置说明）。
 12. **知乎问答页面的回答展开**：问答页面默认返回问题 + 高赞 5 个回答（可能截断）。每个回答后标注了 `answer_id`，如需获取某个回答的完整内容，拼接 URL 单独抓取：
     ```
     https://www.zhihu.com/question/{question_id}/answer/{answer_id}

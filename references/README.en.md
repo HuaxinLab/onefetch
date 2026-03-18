@@ -71,8 +71,8 @@ After installation, tell the agent:
 >
 > On first use, the agent will guide you through a one-time Cookie setup.
 
-**Scenario 6: Zhihu anti-bot block**
-> The agent will prompt you to configure a Zhihu Cookie. Follow the instructions once.
+**Scenario 6: Zhihu column articles need Cookie**
+> Zhihu Q&A and answer pages work without Cookie. Zhihu column articles (`zhuanlan.zhihu.com`) require a Cookie — the agent will prompt you to configure it once.
 
 **Scenario 7: Extract/download images from a page**
 > "Download the images from this post", "Extract image links from this page"
@@ -82,7 +82,7 @@ After installation, tell the agent:
 
 ### Cookie Setup
 
-Some platforms (Zhihu, Xiaohongshu comments) require a one-time Cookie configuration:
+Some platforms (Zhihu columns, Xiaohongshu comments) require a one-time Cookie configuration:
 
 1. Log in to the platform in your browser
 2. Get the Cookie (choose one method):

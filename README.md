@@ -71,8 +71,8 @@ ln -s /path/to/onefetch ~/.claude/skills/onefetch
 >
 > 首次使用评论功能时，agent 会引导你配置一次 Cookie。
 
-**场景 6：知乎被风控**
-> agent 会提示你配置知乎 Cookie，按提示操作一次即可。
+**场景 6：知乎专栏需要 Cookie**
+> 知乎问答和回答页面无需 Cookie 可直接读取。知乎专栏文章需要 Cookie，agent 会提示你配置一次即可。
 
 **场景 7：提取/下载页面中的图片**
 > "下载这个帖子的图片"、"提取这个页面的图片链接"
@@ -82,7 +82,7 @@ ln -s /path/to/onefetch ~/.claude/skills/onefetch
 
 ### Cookie 配置方法
 
-部分平台（知乎、小红书评论）需要一次性配置 Cookie：
+部分平台（知乎专栏、小红书评论）需要一次性配置 Cookie：
 
 1. 在浏览器中登录对应平台
 2. 获取 Cookie（任选一种方式）：
