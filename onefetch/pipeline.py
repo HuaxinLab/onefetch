@@ -21,10 +21,10 @@ class IngestionPipeline:
         for source_url in unique_urls:
             try:
                 adapter = self._router.route(source_url, forced_adapter=forced_adapter)
-                output = await adapter.crawl(source_url)
-                output.feed.compute_content_hash()
+                feed = await adapter.crawl(source_url)
+                feed.compute_content_hash()
 
-                comment_fetch = (output.feed.metadata or {}).get("comment_fetch") or {}
+                comment_fetch = (feed.metadata or {}).get("comment_fetch") or {}
                 comment_source = str(comment_fetch.get("source") or "none")
                 api_reason = (comment_fetch.get("api") or {}).get("reason")
                 risk_controlled = api_reason in {"risk_controlled", "risk_cooldown"}
@@ -33,16 +33,16 @@ class IngestionPipeline:
                 report.results.append(
                     IngestResult(
                         source_url=source_url,
-                        canonical_url=output.feed.canonical_url,
+                        canonical_url=feed.canonical_url,
                         crawler_id=adapter.id,
                         status="fetched",
-                        content_hash=output.feed.content_hash,
-                        title=output.feed.title,
-                        comment_count=len(output.feed.comments),
+                        content_hash=feed.content_hash,
+                        title=feed.title,
+                        comment_count=len(feed.comments),
                         comment_source=comment_source,
-                        body_preview=self._preview(output.feed.body, limit=280),
-                        body_excerpt=self._preview(output.feed.body, limit=1600),
-                        body_full=(output.feed.body or "").strip(),
+                        body_preview=self._preview(feed.body, limit=280),
+                        body_excerpt=self._preview(feed.body, limit=1600),
+                        body_full=(feed.body or "").strip(),
                         risk_controlled=risk_controlled,
                     )
                 )

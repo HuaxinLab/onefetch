@@ -9,7 +9,7 @@ from lxml import html
 
 from onefetch.adapters.base import BaseAdapter, node_to_text
 from onefetch.http import create_async_client
-from onefetch.models import Capture, CrawlOutput, FeedEntry
+from onefetch.models import FeedEntry
 from onefetch.router import normalize_url
 
 
@@ -20,7 +20,7 @@ class GenericHtmlAdapter(BaseAdapter):
     def supports(self, url: str) -> bool:
         return True
 
-    async def crawl(self, url: str) -> CrawlOutput:
+    async def crawl(self, url: str) -> FeedEntry:
         mode = self._render_mode()
         fetch_error = ""
         final_url = url
@@ -97,15 +97,7 @@ class GenericHtmlAdapter(BaseAdapter):
             content = body_text[:5000]
 
         canonical = normalize_url(final_url)
-        capture = Capture(
-            source_url=url,
-            canonical_url=canonical,
-            final_url=final_url,
-            status_code=status_code,
-            headers=headers,
-            body=body_text,
-        )
-        feed = FeedEntry(
+        return FeedEntry(
             source_url=url,
             canonical_url=canonical,
             crawler_id=self.id,
@@ -119,7 +111,6 @@ class GenericHtmlAdapter(BaseAdapter):
                 "browser": browser_status,
             },
         )
-        return CrawlOutput(capture=capture, feed=feed)
 
     @staticmethod
     def _render_mode() -> str:

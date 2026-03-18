@@ -1,5 +1,5 @@
 from onefetch.adapters.base import BaseAdapter
-from onefetch.models import Capture, CrawlOutput, FeedEntry
+from onefetch.models import FeedEntry
 from onefetch.pipeline import IngestionPipeline
 from onefetch.router import Router
 
@@ -11,22 +11,14 @@ class FakeAdapter(BaseAdapter):
     def supports(self, url: str) -> bool:
         return True
 
-    async def crawl(self, url: str) -> CrawlOutput:
-        capture = Capture(
-            source_url=url,
-            canonical_url=url,
-            final_url=url,
-            status_code=200,
-            body="<html>ok</html>",
-        )
-        feed = FeedEntry(
+    async def crawl(self, url: str) -> FeedEntry:
+        return FeedEntry(
             source_url=url,
             canonical_url=url,
             crawler_id=self.id,
             title="ok",
             body="payload",
         )
-        return CrawlOutput(capture=capture, feed=feed)
 
 
 async def test_pipeline_fetch_only() -> None:

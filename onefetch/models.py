@@ -21,17 +21,6 @@ class FeedComment(BaseModel):
     text: str
 
 
-class Capture(BaseModel):
-    id: str = Field(default_factory=_uuid)
-    source_url: str
-    canonical_url: str
-    final_url: str
-    status_code: int
-    headers: dict[str, str] = Field(default_factory=dict)
-    body: str
-    fetched_at: datetime = Field(default_factory=_now)
-
-
 class FeedEntry(BaseModel):
     id: str = Field(default_factory=_uuid)
     source_url: str
@@ -53,11 +42,6 @@ class FeedEntry(BaseModel):
         return self.content_hash
 
 
-class CrawlOutput(BaseModel):
-    capture: Capture
-    feed: FeedEntry
-
-
 class LLMOutputs(BaseModel):
     summary: str = ""
     key_points: list[str] = Field(default_factory=list)
@@ -77,7 +61,6 @@ class IngestResult(BaseModel):
     error_type: str = ""
     retryable: bool = False
     action_hint: str = ""
-    raw_path: str = ""
     feed_path: str = ""
     note_path: str = ""
     comment_count: int = 0

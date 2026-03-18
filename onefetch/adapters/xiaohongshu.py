@@ -13,7 +13,7 @@ from lxml import html
 
 from onefetch.adapters.base import BaseAdapter
 from onefetch.http import create_async_client
-from onefetch.models import Capture, CrawlOutput, FeedComment, FeedEntry
+from onefetch.models import FeedComment, FeedEntry
 from onefetch.router import normalize_url
 
 
@@ -27,7 +27,7 @@ class XiaohongshuAdapter(BaseAdapter):
         domain = (urlparse(url).hostname or "").lower()
         return "xiaohongshu.com" in domain or "xhslink.com" in domain
 
-    async def crawl(self, url: str) -> CrawlOutput:
+    async def crawl(self, url: str) -> FeedEntry:
         headers = {
             "User-Agent": "Mozilla/5.0 (compatible; OneFetch/0.1)",
             "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
@@ -69,15 +69,7 @@ class XiaohongshuAdapter(BaseAdapter):
             "dom": dom_status,
         }
 
-        capture = Capture(
-            source_url=url,
-            canonical_url=canonical,
-            final_url=final_url,
-            status_code=response.status_code,
-            headers={k.lower(): v for k, v in response.headers.items()},
-            body=body_text,
-        )
-        feed = FeedEntry(
+        return FeedEntry(
             source_url=url,
             canonical_url=canonical,
             crawler_id=self.id,
@@ -88,7 +80,6 @@ class XiaohongshuAdapter(BaseAdapter):
             comments=comments,
             metadata=metadata,
         )
-        return CrawlOutput(capture=capture, feed=feed)
 
     def _extract_from_html_and_state(
         self,

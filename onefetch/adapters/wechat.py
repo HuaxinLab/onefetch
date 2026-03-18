@@ -9,7 +9,7 @@ from lxml import html
 
 from onefetch.adapters.base import BaseAdapter, node_to_text
 from onefetch.http import create_async_client
-from onefetch.models import Capture, CrawlOutput, FeedEntry
+from onefetch.models import FeedEntry
 from onefetch.router import normalize_url
 
 
@@ -21,7 +21,7 @@ class WechatAdapter(BaseAdapter):
         host = (urlparse(url).hostname or "").lower()
         return host == "mp.weixin.qq.com"
 
-    async def crawl(self, url: str) -> CrawlOutput:
+    async def crawl(self, url: str) -> FeedEntry:
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
             "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
@@ -55,15 +55,7 @@ class WechatAdapter(BaseAdapter):
                     "WeChat page requires browser rendering but Playwright is not installed."
                 )
 
-        capture = Capture(
-            source_url=url,
-            canonical_url=canonical,
-            final_url=final_url,
-            status_code=response.status_code,
-            headers={k.lower(): v for k, v in response.headers.items()},
-            body=body_text,
-        )
-        feed = FeedEntry(
+        return FeedEntry(
             source_url=url,
             canonical_url=canonical,
             crawler_id=self.id,
@@ -79,7 +71,6 @@ class WechatAdapter(BaseAdapter):
                 "cleanup": cleanup_info,
             },
         )
-        return CrawlOutput(capture=capture, feed=feed)
 
     @staticmethod
     def _extract_article(

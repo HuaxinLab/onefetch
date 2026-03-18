@@ -12,7 +12,7 @@ from lxml import html
 
 from onefetch.adapters.base import BaseAdapter, node_to_text
 from onefetch.http import create_async_client
-from onefetch.models import Capture, CrawlOutput, FeedEntry
+from onefetch.models import FeedEntry
 from onefetch.router import normalize_url
 
 _INITIAL_DATA_RE = re.compile(
@@ -33,7 +33,7 @@ class ZhihuAdapter(BaseAdapter):
             return True
         return host.endswith("zhihu.com") and path.startswith("/question/")
 
-    async def crawl(self, url: str) -> CrawlOutput:
+    async def crawl(self, url: str) -> FeedEntry:
         final_url, body_text, status_code, headers, render_mode, browser_status = await self._fetch_html(url)
 
         canonical = normalize_url(final_url)
@@ -77,15 +77,7 @@ class ZhihuAdapter(BaseAdapter):
         if title and title.endswith(" - 知乎"):
             title = title[: -len(" - 知乎")].strip()
 
-        capture = Capture(
-            source_url=url,
-            canonical_url=canonical,
-            final_url=final_url,
-            status_code=status_code,
-            headers=headers,
-            body=body_text,
-        )
-        feed = FeedEntry(
+        return FeedEntry(
             source_url=url,
             canonical_url=canonical,
             crawler_id=self.id,
@@ -100,7 +92,6 @@ class ZhihuAdapter(BaseAdapter):
                 **metadata,
             },
         )
-        return CrawlOutput(capture=capture, feed=feed)
 
     async def _fetch_html(self, url: str) -> tuple[str, str, int, dict[str, str], str, dict[str, str]]:
         final_url = url

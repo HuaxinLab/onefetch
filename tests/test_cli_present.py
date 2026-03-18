@@ -2,7 +2,7 @@ import json
 
 from onefetch import cli
 from onefetch.adapters.base import BaseAdapter
-from onefetch.models import Capture, CrawlOutput, FeedEntry
+from onefetch.models import FeedEntry
 
 
 class FakeAdapter(BaseAdapter):
@@ -13,23 +13,15 @@ class FakeAdapter(BaseAdapter):
     def supports(self, url: str) -> bool:
         return True
 
-    async def crawl(self, url: str) -> CrawlOutput:
+    async def crawl(self, url: str) -> FeedEntry:
         type(self).calls += 1
-        capture = Capture(
-            source_url=url,
-            canonical_url=url,
-            final_url=url,
-            status_code=200,
-            body="<html><body>ok</body></html>",
-        )
-        feed = FeedEntry(
+        return FeedEntry(
             source_url=url,
             canonical_url=url,
             crawler_id=self.id,
             title="ok",
             body="full content",
         )
-        return CrawlOutput(capture=capture, feed=feed)
 
 
 def test_ingest_present_mode_outputs_block(tmp_path, capsys) -> None:

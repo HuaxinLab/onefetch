@@ -6,7 +6,7 @@ from typing import ClassVar
 
 from lxml import html as lxml_html
 
-from onefetch.models import CrawlOutput
+from onefetch.models import FeedEntry
 
 
 _BLOCK_TAGS = frozenset({
@@ -65,5 +65,5 @@ class BaseAdapter(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def crawl(self, url: str) -> CrawlOutput:
+    async def crawl(self, url: str) -> FeedEntry:
         raise NotImplementedError
