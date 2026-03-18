@@ -50,6 +50,10 @@ class WechatAdapter(BaseAdapter):
                 published_at = browser_data.get("published_at") or published_at
                 content = browser_data.get("content") or content
                 cleanup_info = browser_data.get("cleanup") or cleanup_info
+            elif browser_status.get("reason") == "playwright_not_installed":
+                raise RuntimeError(
+                    "WeChat page requires browser rendering but Playwright is not installed."
+                )
 
         capture = Capture(
             source_url=url,
@@ -133,7 +137,7 @@ class WechatAdapter(BaseAdapter):
         try:
             from playwright.async_api import async_playwright
         except Exception:
-            return None, {"status": "skipped", "reason": "playwright_not_installed"}
+            return None, {"status": "failed", "reason": "playwright_not_installed"}
 
         try:
             async with async_playwright() as p:

@@ -85,7 +85,7 @@ class IngestionPipeline:
                     )
                 )
             except Exception as exc:
-                code, err_type, retryable = self._classify_error(exc)
+                code, err_type, retryable, action_hint = self._classify_error(exc)
                 report.failed_count += 1
                 report.results.append(
                     IngestResult(
@@ -97,6 +97,7 @@ class IngestionPipeline:
                         error_code=code,
                         error_type=err_type,
                         retryable=retryable,
+                        action_hint=action_hint,
                     )
                 )
 
@@ -110,21 +111,29 @@ class IngestionPipeline:
         return text[: limit - 1] + "…"
 
     @staticmethod
-    def _classify_error(exc: Exception) -> tuple[str, str, bool]:
+    def _classify_error(exc: Exception) -> tuple[str, str, bool, str]:
+        """Return (error_code, error_type, retryable, action_hint)."""
         if isinstance(exc, LookupError):
-            return "route.not_found", "route", False
+            return "route.not_found", "route", False, ""
         if isinstance(exc, httpx.TimeoutException):
-            return "network.timeout", "network", True
+            return "network.timeout", "network", True, ""
         if isinstance(exc, httpx.HTTPStatusError):
             status = exc.response.status_code if exc.response else 0
             if status in {429, 461}:
-                return "risk.rate_limited", "risk", True
+                return "risk.rate_limited", "risk", True, ""
             if status >= 500:
-                return f"network.http_{status}", "network", True
-            return f"network.http_{status}", "network", False
+                return f"network.http_{status}", "network", True, ""
+            return f"network.http_{status}", "network", False, ""
         message = str(exc).lower()
+        if "playwright is not installed" in message:
+            return (
+                "dep.playwright_missing",
+                "dependency",
+                False,
+                "pip install 'onefetch[browser]' && python -m playwright install chromium",
+            )
         if "risk" in message or "captcha" in message or "风控" in message:
-            return "risk.blocked", "risk", True
+            return "risk.blocked", "risk", True, ""
         if "parse" in message or "json" in message:
-            return "parse.failed", "parse", False
-        return "unknown", "unknown", False
+            return "parse.failed", "parse", False, ""
+        return "unknown", "unknown", False, ""

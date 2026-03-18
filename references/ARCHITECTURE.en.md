@@ -88,17 +88,54 @@ Writes:
 
 ## 6. Error Model
 
-Pipeline classifies failures into:
-- `route.*`
-- `network.*`
-- `risk.*`
-- `parse.*`
-- `unknown`
+### 6.1 Classification
 
-And returns:
-- `error_code`
-- `error_type`
-- `retryable`
+Pipeline classifies failures via `_classify_error`:
+
+| error_code prefix | error_type | Meaning | retryable |
+|---|---|---|---|
+| `route.*` | route | No matching adapter | No |
+| `network.timeout` | network | Request timed out | Yes |
+| `network.http_429` | network | Rate-limited | Yes |
+| `network.http_5xx` | network | Server error | Yes |
+| `network.http_xxx` | network | Other HTTP errors | No |
+| `risk.*` | risk | Anti-bot / captcha / restrictions | Yes |
+| `dep.playwright_missing` | dependency | Browser rendering needed but Playwright not installed | No |
+| `parse.*` | parse | Parse failure | No |
+| `unknown` | unknown | Unclassified | No |
+
+### 6.2 Structured Output
+
+Each failed `IngestResult` carries these error fields:
+
+| Field | Purpose |
+|---|---|
+| `error` | Human-readable error description |
+| `error_code` | Machine-readable code (e.g. `dep.playwright_missing`) |
+| `error_type` | Error category (e.g. `dependency`) |
+| `retryable` | Whether the agent should retry |
+| `action_hint` | A command the agent can execute to fix the issue (e.g. install command) |
+
+### 6.3 Error Flow
+
+```text
+Adapter layer
+  Detects failure → raise RuntimeError("short description")
+      ↓
+Pipeline layer (_classify_error)
+  Exception message → (error_code, error_type, retryable, action_hint)
+      ↓
+Result layer (IngestResult)
+  Structured fields written to result object and persisted to cache
+      ↓
+CLI layer
+  error_code / error_type / retryable / action_hint printed line by line
+```
+
+Key principles:
+- Adapters raise concise exceptions — no verbose install instructions.
+- `_classify_error` is the single source of truth for classification and hints.
+- `action_hint` provides an executable fix command so agents can auto-resolve dependency issues.
 
 ## 7. Extensibility
 

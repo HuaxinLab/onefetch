@@ -331,6 +331,8 @@ def _print_present(report) -> None:
             print(f"- error_code: {result.error_code}")
             print(f"- error_type: {result.error_type}")
             print(f"- retryable: {result.retryable}")
+        if result.action_hint:
+            print(f"- action_hint: {result.action_hint}")
         points = _build_key_points(result.body_excerpt)
         if points:
             print("- key_points:")
@@ -446,6 +448,8 @@ async def run_ingest(args: argparse.Namespace) -> int:
             print(f"  error={result.error}")
             if result.error_code:
                 print(f"  error_code={result.error_code} type={result.error_type} retryable={result.retryable}")
+            if result.action_hint:
+                print(f"  action_hint={result.action_hint}")
         if result.title:
             print(f"  title={result.title}")
         print(f"  comments={result.comment_count} source={result.comment_source}")

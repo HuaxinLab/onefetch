@@ -39,6 +39,7 @@ class TempCacheService:
             "error_code": result.error_code,
             "error_type": result.error_type,
             "retryable": result.retryable,
+            "action_hint": result.action_hint,
         }
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         self._prune_if_needed()
@@ -91,6 +92,7 @@ class TempCacheService:
             error_code=str(payload.get("error_code") or ""),
             error_type=str(payload.get("error_type") or ""),
             retryable=bool(payload.get("retryable") or False),
+            action_hint=str(payload.get("action_hint") or ""),
             comment_count=int(payload.get("comment_count") or 0),
             comment_source=str(payload.get("comment_source") or "none"),
             body_preview=str(payload.get("body_preview") or ""),

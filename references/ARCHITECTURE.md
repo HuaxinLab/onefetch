@@ -88,17 +88,54 @@ OneFetch/
 
 ## 6. 错误模型
 
-pipeline 对失败进行分类：
-- `route.*`：路由错误
-- `network.*`：网络/HTTP/超时
-- `risk.*`：风控/限制
-- `parse.*`：解析失败
-- `unknown`：未分类错误
+### 6.1 分类体系
 
-并输出：
-- `error_code`
-- `error_type`
-- `retryable`
+pipeline 对失败进行分类（`_classify_error`）：
+
+| error_code 前缀 | error_type | 含义 | retryable |
+|---|---|---|---|
+| `route.*` | route | 路由错误（无匹配 adapter） | No |
+| `network.timeout` | network | 请求超时 | Yes |
+| `network.http_429` | network | 被限速 | Yes |
+| `network.http_5xx` | network | 服务端错误 | Yes |
+| `network.http_xxx` | network | 其他 HTTP 错误 | No |
+| `risk.*` | risk | 风控/验证码/限制 | Yes |
+| `dep.playwright_missing` | dependency | 需要浏览器渲染但 Playwright 未安装 | No |
+| `parse.*` | parse | 解析失败 | No |
+| `unknown` | unknown | 未分类错误 | No |
+
+### 6.2 结构化输出
+
+每个失败结果（`IngestResult`）包含以下错误字段：
+
+| 字段 | 用途 |
+|---|---|
+| `error` | 人可读的错误描述 |
+| `error_code` | 机器可读的错误码（如 `dep.playwright_missing`） |
+| `error_type` | 错误大类（如 `dependency`） |
+| `retryable` | agent 是否应重试 |
+| `action_hint` | agent 可直接执行的修复命令（如安装命令） |
+
+### 6.3 错误输出流程
+
+```text
+适配器层（adapter）
+  检测到异常条件 → raise RuntimeError("简短描述")
+      ↓
+编排层（pipeline._classify_error）
+  异常 message → (error_code, error_type, retryable, action_hint)
+      ↓
+结果层（IngestResult）
+  结构化字段写入结果对象，同时持久化到缓存
+      ↓
+展示层（CLI）
+  error_code / error_type / retryable / action_hint 逐行输出
+```
+
+关键原则：
+- 适配器只抛简短异常，不塞安装命令等冗长提示。
+- `_classify_error` 是唯一的分类与提示归口，集中维护。
+- `action_hint` 给 agent 提供可直接执行的修复命令，使 agent 能自动修复依赖问题。
 
 ## 7. 可扩展性
 

@@ -76,6 +76,7 @@ class IngestResult(BaseModel):
     error_code: str = ""
     error_type: str = ""
     retryable: bool = False
+    action_hint: str = ""
     raw_path: str = ""
     feed_path: str = ""
     note_path: str = ""

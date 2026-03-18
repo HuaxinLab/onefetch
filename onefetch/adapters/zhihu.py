@@ -126,11 +126,19 @@ class ZhihuAdapter(BaseAdapter):
                     body_text = rendered_html
                     status_code = 200
                     render_mode = "browser"
+                elif browser_status.get("reason") == "playwright_not_installed":
+                    raise RuntimeError(
+                        "Zhihu anti-bot challenge requires browser rendering but Playwright is not installed."
+                    )
                 else:
                     browser_status = {"status": "skipped", "reason": "browser_fallback_empty"}
         except Exception as exc:
             rendered_html, rendered_url, browser_status = await self._render_with_zhihu_browser(url, cookie_header)
             if not rendered_html:
+                if browser_status.get("reason") == "playwright_not_installed":
+                    raise RuntimeError(
+                        "Zhihu fetch failed and browser fallback unavailable — Playwright is not installed."
+                    ) from exc
                 raise RuntimeError(f"zhihu fetch failed: {exc}") from exc
             final_url = rendered_url or final_url
             body_text = rendered_html
@@ -176,7 +184,7 @@ class ZhihuAdapter(BaseAdapter):
         try:
             from playwright.async_api import async_playwright
         except Exception:
-            return None, url, {"status": "skipped", "reason": "playwright_not_installed"}
+            return None, url, {"status": "failed", "reason": "playwright_not_installed"}
 
         try:
             async with async_playwright() as p:

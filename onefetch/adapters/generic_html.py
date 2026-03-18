@@ -85,6 +85,14 @@ class GenericHtmlAdapter(BaseAdapter):
         if not body_text and fetch_error:
             raise RuntimeError(f"generic_html fetch failed: {fetch_error}")
 
+        # If browser was needed but Playwright is missing, raise so pipeline can
+        # populate error_code=dep.playwright_missing and action_hint with install command.
+        if should_try_browser and not used_browser:
+            if browser_status.get("reason") == "playwright_not_installed":
+                raise RuntimeError(
+                    "This page requires browser rendering but Playwright is not installed."
+                )
+
         if not content:
             content = body_text[:5000]
 
@@ -164,8 +172,17 @@ class GenericHtmlAdapter(BaseAdapter):
         normalized = body_text.lower()
         if "enable javascript" in normalized or "please turn javascript" in normalized:
             return True
+        # Chinese SPA placeholders
+        for marker in ("加载中", "正在加载", "页面加载中", "数据加载中"):
+            if marker in body_text and len(content or "") < 300:
+                return True
         if "id=\"__next\"" in normalized and len(content or "") < 120:
             return True
+        # Common SPA root markers with little content
+        if len(content or "") < 300:
+            for spa_marker in ('id="app"', 'id="root"', 'id="__nuxt"'):
+                if spa_marker in normalized:
+                    return True
         return len(content or "") < 160
 
     @staticmethod
@@ -173,7 +190,7 @@ class GenericHtmlAdapter(BaseAdapter):
         try:
             from playwright.async_api import async_playwright
         except Exception:
-            return None, url, {"status": "skipped", "reason": "playwright_not_installed"}
+            return None, url, {"status": "failed", "reason": "playwright_not_installed"}
 
         try:
             async with async_playwright() as p:

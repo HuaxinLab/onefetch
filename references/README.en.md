@@ -1,15 +1,14 @@
 # OneFetch
 
-**语言 / Language**: [中文](../README.md) | [English](./README.en.md)
+**Language**: [中文](../README.md) | [English](./README.en.md)
 
-OneFetch is an agent-facing web reading skill.
+OneFetch is an agent-facing web reading skill. Supported sources:
+- Xiaohongshu (posts + optional comments)
+- WeChat Official Account articles
+- Zhihu (column articles + Q&A)
+- Generic web pages (including SPA / JS-rendered pages)
 
-Supported sources:
-- Xiaohongshu
-- WeChat Official Account pages
-- Generic HTML pages (including JS-heavy pages)
-
-Default use case is fast reading: fetch cleaned full text and let the LLM summarize.
+Default use case: fetch cleaned body text and let the LLM summarize.
 
 ## Clone
 
@@ -24,75 +23,69 @@ cd onefetch
 - Return cleaned body text for LLM summarization, translation, and deeper analysis.
 - Prefer cache-first reading by default to avoid repeated crawling.
 
-## Typical Use Cases
-
-- Let an agent read and summarize a WeChat Official Account article.
-- Let an agent fetch a Xiaohongshu post, with comments when needed.
-- Let an agent handle generic webpages in the same unified flow.
-- Store content only after the user explicitly confirms.
-
 ## Install Into Agent (Recommended)
 
-Most users do not need to run crawler scripts directly. The common path is to install OneFetch as a skill for the agent.
+Most users do not need to run crawler scripts directly. Just install OneFetch as a skill for the agent.
 
-Example for Codex:
+Example for Claude Code:
 
 ```bash
-ln -s <project-root> ~/.codex/skills/onefetch
+ln -s /path/to/onefetch ~/.claude/skills/onefetch
 ```
 
-After installation, tell the agent (this is all non-technical users need):
+After installation, tell the agent:
 - "Read this webpage: <URL>"
 - "Summarize this WeChat article"
 - "Fetch this Xiaohongshu post and list key points"
 
+## Supported Platforms
+
+| Platform | Example prompts |
+|---|---|
+| Xiaohongshu | "Read this Xiaohongshu post: <URL>" |
+| WeChat | "Summarize this WeChat article: <URL>" |
+| Zhihu | "Read this Zhihu column post: <URL>", "Summarize this Zhihu Q&A: <URL>" |
+| Other pages | "Read this page and summarize in 3 points: <URL>" |
+
+> For SPA / JS-rendered pages (React, Vue, Next.js sites, etc.), OneFetch automatically attempts browser rendering. The agent will install the required browser components on first use.
+
 ## Common Scenarios
 
-- Scenario 1: Quick first-pass reading
-: "Read this webpage and summarize it in 3 key points: <URL>"
+**Scenario 1: Quick first-pass reading**
+> "Read this webpage and summarize it in 3 key points: <URL>"
 
-- Scenario 2: Valuable content, save it
-: "Organize this content and save it."
+**Scenario 2: Valuable content, save it**
+> "Organize this content and save it."
 
-- Scenario 3: Agent says body is saved but structured summary may be inaccurate
-: "Use the saved full text and regenerate summary and tags." (No need to refetch URL)
+**Scenario 3: Agent says summary/tags may be inaccurate**
+> "Use the saved full text and regenerate summary and tags." (No need to refetch.)
 
-- Scenario 4: You want the latest page content
-: "Refresh this URL first, then re-organize and save it: <URL>"
+**Scenario 4: You want the latest page content**
+> "Refresh this URL first, then re-organize and save it: <URL>"
 
-## Plugin Capabilities (For End Users)
+**Scenario 5: Need Xiaohongshu comments**
+> "Fetch this Xiaohongshu post including comments: <URL>"
+>
+> On first use, the agent will guide you through a one-time Cookie setup.
 
-You do not need to provide low-level parameters (callback/regex).  
-Describe your goal in natural language, and the agent will choose/test the right plugin.
+**Scenario 6: Zhihu anti-bot block**
+> The agent will prompt you to configure a Zhihu Cookie. Follow the instructions once.
 
-Available capability types:
-- Element extraction: fetch a specific `src/href/text` from a page
-- JSONP field extraction: fetch one field from a callback payload
-- Chain extraction: HTML -> JS -> JSONP -> target field
+## Element Extraction (Plugin)
 
-Built-in preset families (for agent reuse):
-- `template_html_js_jsonp`: template-only preset for learning/writing new presets
-- `chain_cdn_js_jsonp_img`: image URL focused extraction
-- `chain_cdn_js_jsonp_download`: download URL focused extraction
-- `chain_generic_js_jsonp_value`: quick probing for unknown sites
-- `chain_js_only_jsonp_value`: use when JS URL is already known
+Besides reading full articles, you can ask the agent to extract specific content from a page. No technical parameters needed — just describe your goal:
 
-How to ask the agent:
 - "Get the download button link from this page: <URL>"
 - "This page has a dynamic image. Extract the final image URL: <URL>"
 - "Extract `img_url` from this callback response: <URL>"
 
-If extraction fails, the agent should return a concise reason and concrete next-step suggestion.
+If extraction fails, the agent will return a concise reason and suggest next steps.
 
-## Directory Layout
+## Troubleshooting
 
-- `SKILL.md`
-- `scripts/`
-- `references/`
-- `onefetch/`
-- `tests/`
+In most cases the agent handles issues automatically. If a dependency is missing or the environment is broken, the agent will provide the exact fix command — just follow the prompt.
 
-## Documentation Entry
+## Documentation
 
-- This page is the user usage guide (agent-first scenarios).
-- Docs index: [references/INDEX.md](./INDEX.md)
+- This page is the user guide for regular users.
+- Developers / advanced users: see [Documentation Index](./INDEX.md)
