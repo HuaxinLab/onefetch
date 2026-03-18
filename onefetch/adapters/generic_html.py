@@ -28,6 +28,7 @@ class GenericHtmlAdapter(BaseAdapter):
         headers: dict[str, str] = {}
         body_text = ""
         used_browser = False
+        images: list[str] = []
 
         if mode != "browser":
             try:
@@ -56,7 +57,7 @@ class GenericHtmlAdapter(BaseAdapter):
                 ],
             )
             published_at = self._parse_datetime(published_raw)
-            content = self._extract_main_text(tree)
+            content, images = self._extract_main_text(tree)
 
         should_try_browser = mode == "browser" or (mode == "auto" and self._needs_browser_fallback(content, body_text))
         browser_status: dict[str, str] = {"status": "skipped", "reason": "not_needed"}
@@ -80,7 +81,7 @@ class GenericHtmlAdapter(BaseAdapter):
                     ],
                 )
                 published_at = self._parse_datetime(published_raw)
-                content = self._extract_main_text(tree)
+                content, images = self._extract_main_text(tree)
 
         if not body_text and fetch_error:
             raise RuntimeError(f"generic_html fetch failed: {fetch_error}")
@@ -97,7 +98,6 @@ class GenericHtmlAdapter(BaseAdapter):
             content = body_text[:5000]
 
         canonical = normalize_url(final_url)
-        images = self._extract_images(tree) if body_text else []
         return FeedEntry(
             source_url=url,
             canonical_url=canonical,
@@ -154,20 +154,9 @@ class GenericHtmlAdapter(BaseAdapter):
 
         candidates = cleaned.xpath("//article") or cleaned.xpath("//main") or cleaned.xpath("//body")
         if not candidates:
-            return ""
-        return node_to_text(candidates[0], image_placeholders=True)[:20000]
-
-    @staticmethod
-    def _extract_images(tree: html.HtmlElement) -> list[str]:
-        urls: list[str] = []
-        seen: set[str] = set()
-        for xpath in ["//meta[@property='og:image']/@content", "//img/@data-src", "//img/@src"]:
-            for val in tree.xpath(xpath):
-                val = (val or "").strip()
-                if val and val.startswith("http") and "svg+xml" not in val and "1px" not in val and val not in seen:
-                    seen.add(val)
-                    urls.append(val)
-        return urls[:30]
+            return "", []
+        text, images = node_to_text(candidates[0], image_placeholders=True)
+        return text[:20000], images
 
     @staticmethod
     def _needs_browser_fallback(content: str, body_text: str) -> bool:

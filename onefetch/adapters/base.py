@@ -15,13 +15,15 @@ _BLOCK_TAGS = frozenset({
 })
 
 
-def node_to_text(node: lxml_html.HtmlElement, *, image_placeholders: bool = False) -> str:
+def node_to_text(node: lxml_html.HtmlElement, *, image_placeholders: bool = False) -> str | tuple[str, list[str]]:
     """Extract text from an lxml element, preserving block-level line breaks.
 
     If ``image_placeholders`` is True, ``<img>`` tags are replaced with
-    ``[IMG:N]`` markers so that image positions can be reconstructed later.
+    ``[IMG:N]`` markers and the function returns ``(text, images)`` where
+    images is a list of URLs matching the placeholder indices.
     """
     img_index = 0
+    images: list[str] = []
     for el in node.iter():
         if el.tag in _BLOCK_TAGS:
             if el.text:
@@ -36,6 +38,7 @@ def node_to_text(node: lxml_html.HtmlElement, *, image_placeholders: bool = Fals
             src = el.get("data-src") or el.get("src") or ""
             if src and src.startswith("http") and "svg+xml" not in src and "1px" not in src:
                 img_index += 1
+                images.append(src)
                 marker = f"\n[IMG:{img_index}]\n"
                 if el.tail:
                     el.tail = marker + el.tail
@@ -45,7 +48,10 @@ def node_to_text(node: lxml_html.HtmlElement, *, image_placeholders: bool = Fals
     text = text.replace("\u00a0", " ")
     text = re.sub(r"\n\s*\n+", "\n\n", text)
     lines = [line.strip() for line in text.splitlines()]
-    return "\n".join(line for line in lines if line).strip()
+    result = "\n".join(line for line in lines if line).strip()
+    if image_placeholders:
+        return result, images
+    return result
 
 
 class BaseAdapter(ABC):

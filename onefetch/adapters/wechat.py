@@ -36,7 +36,7 @@ class WechatAdapter(BaseAdapter):
         body_text = response.text
         tree = html.fromstring(body_text)
 
-        title, author, published_at, content, cleanup_info = self._extract_article(tree, body_text)
+        title, author, published_at, content, images, cleanup_info = self._extract_article(tree, body_text)
         mode = "http"
 
         should_browser_fallback = self._needs_browser_fallback(tree, content)
@@ -54,8 +54,6 @@ class WechatAdapter(BaseAdapter):
                 raise RuntimeError(
                     "WeChat page requires browser rendering but Playwright is not installed."
                 )
-
-        images = self._extract_images(tree)
 
         return FeedEntry(
             source_url=url,
@@ -80,7 +78,7 @@ class WechatAdapter(BaseAdapter):
     def _extract_article(
         tree: html.HtmlElement,
         raw_html: str,
-    ) -> tuple[str | None, str | None, datetime | None, str, dict[str, int]]:
+    ) -> tuple[str | None, str | None, datetime | None, str, list[str], dict[str, int]]:
         title = WechatAdapter._first_text(
             tree,
             [
@@ -93,13 +91,14 @@ class WechatAdapter(BaseAdapter):
         published_raw = WechatAdapter._first_text(tree, ["//*[@id='publish_time']/text()", "//*[@id='js_publish_time']/text()"])
 
         content = ""
+        content_images: list[str] = []
         blocks = tree.xpath("//*[@id='js_content']")
         if blocks:
-            content = WechatAdapter._clean_text_from_node(blocks[0])
+            content, content_images = WechatAdapter._clean_text_from_node(blocks[0])
         if not content:
             article_nodes = tree.xpath("//article") or tree.xpath("//main")
             if article_nodes:
-                content = WechatAdapter._clean_text_from_node(article_nodes[0])
+                content, content_images = WechatAdapter._clean_text_from_node(article_nodes[0])
 
         if title and "微信公众平台" in title:
             title = title.replace("微信公众平台", "").strip(" -")
@@ -111,7 +110,7 @@ class WechatAdapter(BaseAdapter):
                 published_at = datetime.fromtimestamp(int(ts_match.group(1)), tz=timezone.utc)
 
         cleaned_content, cleanup_info = WechatAdapter._sanitize_content(content)
-        return title, author, published_at, cleaned_content[:40000], cleanup_info
+        return title, author, published_at, cleaned_content[:40000], content_images, cleanup_info
 
     @staticmethod
     def _needs_browser_fallback(tree: html.HtmlElement, content: str) -> bool:
@@ -219,21 +218,7 @@ class WechatAdapter(BaseAdapter):
         return None
 
     @staticmethod
-    def _extract_images(tree: html.HtmlElement) -> list[str]:
-        urls: list[str] = []
-        seen: set[str] = set()
-        content_block = tree.xpath("//*[@id='js_content']")
-        root = content_block[0] if content_block else tree
-        for xpath in [".//img/@data-src", ".//img/@src"]:
-            for val in root.xpath(xpath):
-                val = (val or "").strip()
-                if val and val.startswith("http") and "svg+xml" not in val and val not in seen:
-                    seen.add(val)
-                    urls.append(val)
-        return urls[:30]
-
-    @staticmethod
-    def _clean_text_from_node(node: html.HtmlElement) -> str:
+    def _clean_text_from_node(node: html.HtmlElement) -> tuple[str, list[str]]:
         clone = html.fromstring(html.tostring(node, encoding="unicode"))
         for unwanted in clone.xpath(".//script|.//style|.//noscript|.//iframe"):
             parent = unwanted.getparent()

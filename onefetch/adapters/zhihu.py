@@ -65,8 +65,9 @@ class ZhihuAdapter(BaseAdapter):
             title = parsed_title
         if parsed_author:
             author = parsed_author
+        images: list[str] = []
         if not content:
-            content = self._extract_fallback_body(tree)
+            content, images = self._extract_fallback_body(tree)
 
         if self._is_challenge_or_login_page(final_url, body_text) and self._looks_like_challenge_payload(title, content):
             raise RuntimeError(
@@ -76,8 +77,6 @@ class ZhihuAdapter(BaseAdapter):
 
         if title and title.endswith(" - 知乎"):
             title = title[: -len(" - 知乎")].strip()
-
-        images = self._extract_images(tree)
 
         return FeedEntry(
             source_url=url,
@@ -422,19 +421,7 @@ class ZhihuAdapter(BaseAdapter):
         return len(normalized) < 220
 
     @staticmethod
-    def _extract_images(tree: html.HtmlElement) -> list[str]:
-        urls: list[str] = []
-        seen: set[str] = set()
-        for xpath in ["//meta[@property='og:image']/@content", "//img/@data-original", "//img/@data-actualsrc", "//img/@src"]:
-            for val in tree.xpath(xpath):
-                val = (val or "").strip()
-                if val and val.startswith("http") and "svg+xml" not in val and "data:image" not in val and val not in seen:
-                    seen.add(val)
-                    urls.append(val)
-        return urls[:30]
-
-    @staticmethod
-    def _extract_fallback_body(tree: html.HtmlElement) -> str:
+    def _extract_fallback_body(tree: html.HtmlElement) -> tuple[str, list[str]]:
         candidates = (
             tree.xpath("//article[contains(@class,'Post-RichText')]")
             or tree.xpath("//article")
@@ -442,8 +429,9 @@ class ZhihuAdapter(BaseAdapter):
             or tree.xpath("//body")
         )
         if not candidates:
-            return ""
-        return node_to_text(candidates[0], image_placeholders=True)[:60000]
+            return "", []
+        text, images = node_to_text(candidates[0], image_placeholders=True)
+        return text[:60000], images
 
     @staticmethod
     def _is_challenge_or_login_page(final_url: str, body_text: str) -> bool:
@@ -475,7 +463,8 @@ class ZhihuAdapter(BaseAdapter):
             return ""
         try:
             node = html.fromstring(f"<div>{raw_html}</div>")
-            return node_to_text(node, image_placeholders=True)
+            text, _ = node_to_text(node, image_placeholders=True)
+            return text
         except Exception:
             return raw_html.strip()
 

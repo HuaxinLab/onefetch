@@ -24,7 +24,7 @@ SAMPLE = """
 
 def test_extract_article_cleans_script_noise() -> None:
     tree = html.fromstring(SAMPLE)
-    title, author, published, content, cleanup = WechatAdapter._extract_article(tree, SAMPLE)
+    title, author, published, content, images, cleanup = WechatAdapter._extract_article(tree, SAMPLE)
 
     assert title == "这是公众号标题"
     assert author == "OneFetch Lab"
