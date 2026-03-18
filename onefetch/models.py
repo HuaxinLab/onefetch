@@ -64,12 +64,12 @@ class IngestResult(BaseModel):
     retryable: bool = False
     action_hint: str = ""
     feed_path: str = ""
-    note_path: str = ""
     comment_count: int = 0
     comment_source: str = "none"
     body_preview: str = ""
     body_excerpt: str = ""
     body_full: str = ""
+    images: list[str] = Field(default_factory=list)
     cache_path: str = ""
     llm_outputs: LLMOutputs = Field(default_factory=LLMOutputs)
     llm_outputs_state: Literal["missing", "ok", "fallback"] = "missing"

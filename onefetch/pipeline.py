@@ -43,6 +43,7 @@ class IngestionPipeline:
                         body_preview=self._preview(feed.body, limit=280),
                         body_excerpt=self._preview(feed.body, limit=1600),
                         body_full=(feed.body or "").strip(),
+                        images=feed.images,
                         risk_controlled=risk_controlled,
                     )
                 )

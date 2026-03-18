@@ -41,7 +41,7 @@ agent 不需要手动选择适配器，router 根据 URL 自动路由。
 3. 默认使用 `scripts/run_cli.sh ingest --present --from-cache "URL"`，优先复用缓存，减少重复抓取。
 4. 用户明确要求"最新/重新抓取/刷新"时，使用 `--refresh` 强制实时抓取（即使同时带 `--from-cache` 也会跳过缓存读取）。
 5. 默认保持临时缓存写入（`--cache-temp`），便于后续深入分析 / 翻译复用全文。
-6. 仅在用户明确要求保存 / 归档时使用 `--store`。
+6. 仅在用户明确要求保存 / 归档时使用 `--store`。默认只保存纯文本，用户要求保存图片时加 `--with-images`。
 
 ### LLM 输出回填
 
@@ -236,8 +236,11 @@ bash scripts/run_cli.sh ingest --present --from-cache "https://example.com/artic
 # 用户要求刷新内容（实时抓取）
 bash scripts/run_cli.sh ingest --present --refresh "https://example.com/article"
 
-# 用户明确要求保存
+# 用户明确要求保存（纯文本）
 bash scripts/run_cli.sh ingest --store --from-cache "URL"
+
+# 保存文本 + 图片
+bash scripts/run_cli.sh ingest --store --with-images --from-cache "URL"
 
 # LLM 整理完内容后，立刻回填到缓存
 bash scripts/run_cli.sh cache-backfill "URL" \

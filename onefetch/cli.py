@@ -77,6 +77,7 @@ def build_parser() -> argparse.ArgumentParser:
     ingest.add_argument("--store", action="store_true", help="Persist artifacts to data/ and catalog")
     ingest.add_argument("--present", action="store_true", help="Print normalized presentation blocks for LLM summarization")
     ingest.add_argument("--raw", action="store_true", help="Save raw HTML to reports/raw/ for further processing")
+    ingest.add_argument("--with-images", action="store_true", help="Download images when using --store")
 
     backfill = sub.add_parser("cache-backfill", help="Backfill LLM outputs into an existing cache entry")
     backfill.add_argument("url", help="The URL whose cache entry to update")
@@ -459,12 +460,20 @@ async def run_ingest(args: argparse.Namespace) -> int:
     # Persist to data/ (after cache is up to date)
     if args.store:
         storage = StorageService(paths)
+        with_images = getattr(args, "with_images", False)
         for result in report.results:
             if result.status == "failed":
                 continue
-            feed_path, note_path, is_dup = storage.store_result(result)
-            result.feed_path = feed_path
-            result.note_path = note_path
+            # Images not in cache — re-crawl to get them
+            if with_images and not result.images and result.source_url in cache_hit_states:
+                try:
+                    adapter = router.route(result.source_url, forced_adapter=args.crawler or None)
+                    feed = await adapter.crawl(result.source_url)
+                    result.images = feed.images
+                except Exception:
+                    pass
+            article_dir, is_dup = storage.store_result(result, with_images=with_images)
+            result.feed_path = article_dir
             result.status = "duplicate" if is_dup else "stored"
 
     summary = _build_run_summary(report, duration_sec=duration)
@@ -496,9 +505,7 @@ async def run_ingest(args: argparse.Namespace) -> int:
         if result.body_preview:
             print(f"  preview={result.body_preview}")
         if result.feed_path:
-            print(f"  feed={result.feed_path}")
-        if result.note_path:
-            print(f"  note={result.note_path}")
+            print(f"  stored={result.feed_path}")
         if result.cache_path:
             print(f"  cache={result.cache_path}")
 

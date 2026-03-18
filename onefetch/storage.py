@@ -11,12 +11,7 @@ from onefetch.models import IngestResult
 class StorageService:
     def __init__(self, paths: Paths) -> None:
         self._paths = paths
-        self._ensure_dirs()
-
-    def _ensure_dirs(self) -> None:
-        self._paths.feed_dir.mkdir(parents=True, exist_ok=True)
-        self._paths.notes_dir.mkdir(parents=True, exist_ok=True)
-        self._paths.catalog_file.parent.mkdir(parents=True, exist_ok=True)
+        self._paths.data_dir.mkdir(parents=True, exist_ok=True)
         if not self._paths.catalog_file.exists():
             self._paths.catalog_file.touch()
 
@@ -31,21 +26,29 @@ class StorageService:
                     return record
         return None
 
-    def store_result(self, result: IngestResult) -> tuple[str, str, bool]:
-        """Store an IngestResult to data/. Returns (feed_path, note_path, is_duplicate)."""
+    def store_result(self, result: IngestResult, *, with_images: bool = False) -> tuple[str, bool]:
+        """Store an IngestResult to data/. Returns (article_dir, is_duplicate)."""
         duplicate = self.find_duplicate(result.canonical_url, result.content_hash)
         if duplicate:
-            return duplicate.get("feed_path", ""), duplicate.get("note_path", ""), True
+            return duplicate.get("article_dir", ""), True
 
-        feed_path = self._save_feed(result)
-        note_path = self._save_note(result)
-        self._append_catalog(result, feed_path, note_path)
-        return feed_path, note_path, False
+        article_dir = self._create_article_dir(result)
+        self._save_feed(article_dir, result)
+        self._save_note(article_dir, result, with_images=with_images)
+        if with_images and result.images:
+            self._download_images(article_dir, result.images)
+        self._append_catalog(result, str(article_dir))
+        return str(article_dir), False
 
-    def _save_feed(self, result: IngestResult) -> str:
+    def _create_article_dir(self, result: IngestResult) -> Path:
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-        filename = f"{stamp}-{result.content_hash[:8] or 'unknown'}.json"
-        path = self._paths.feed_dir / filename
+        short_hash = result.content_hash[:8] if result.content_hash else "unknown"
+        dirname = f"{stamp}-{short_hash}"
+        article_dir = self._paths.data_dir / dirname
+        article_dir.mkdir(parents=True, exist_ok=True)
+        return article_dir
+
+    def _save_feed(self, article_dir: Path, result: IngestResult) -> None:
         payload = {
             "source_url": result.source_url,
             "canonical_url": result.canonical_url,
@@ -53,21 +56,18 @@ class StorageService:
             "title": result.title,
             "content_hash": result.content_hash,
             "body": result.body_full or result.body_excerpt or "",
+            "images": result.images,
             "comment_count": result.comment_count,
             "comment_source": result.comment_source,
             "llm_outputs": result.llm_outputs.model_dump(),
             "llm_outputs_state": result.llm_outputs_state,
             "stored_at": datetime.now(timezone.utc).isoformat(),
         }
+        path = article_dir / "feed.json"
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        return str(path)
 
-    def _save_note(self, result: IngestResult) -> str:
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-        filename = f"{stamp}-{result.content_hash[:8] or 'unknown'}.md"
-        path = self._paths.notes_dir / filename
+    def _save_note(self, article_dir: Path, result: IngestResult, *, with_images: bool = False) -> None:
         title = result.title or "Untitled"
-
         lines = [
             f"# {title}",
             "",
@@ -92,13 +92,38 @@ class StorageService:
         if llm.tags:
             lines.extend(["## 标签", "", ", ".join(llm.tags), ""])
 
+        # Images
+        if with_images and result.images:
+            lines.extend(["## 图片", ""])
+            for i, img_url in enumerate(result.images):
+                local_path = f"images/{i + 1:03d}.jpg"
+                lines.append(f"![{i + 1}]({local_path})")
+            lines.append("")
+
         # Body
         body = result.body_full or result.body_excerpt or ""
         if body:
             lines.extend(["## 正文", "", body])
 
+        path = article_dir / "note.md"
         path.write_text("\n".join(lines), encoding="utf-8")
-        return str(path)
+
+    @staticmethod
+    def _download_images(article_dir: Path, images: list[str]) -> None:
+        import urllib.request
+        images_dir = article_dir / "images"
+        images_dir.mkdir(exist_ok=True)
+        for i, url in enumerate(images):
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    data = resp.read()
+                ct = resp.headers.get("Content-Type", "image/jpeg")
+                ext = ".webp" if "webp" in ct else ".png" if "png" in ct else ".gif" if "gif" in ct else ".jpg"
+                path = images_dir / f"{i + 1:03d}{ext}"
+                path.write_bytes(data)
+            except Exception:
+                continue
 
     @staticmethod
     def _llm_source_label(result: IngestResult) -> str:
@@ -112,14 +137,13 @@ class StorageService:
             return "（AI 整理）"
         return ""
 
-    def _append_catalog(self, result: IngestResult, feed_path: str, note_path: str) -> None:
+    def _append_catalog(self, result: IngestResult, article_dir: str) -> None:
         record = {
             "canonical_url": result.canonical_url,
             "content_hash": result.content_hash,
             "crawler_id": result.crawler_id,
             "title": result.title,
-            "feed_path": feed_path,
-            "note_path": note_path,
+            "article_dir": article_dir,
             "stored_at": datetime.now(timezone.utc).isoformat(),
         }
         with self._paths.catalog_file.open("a", encoding="utf-8") as handle:
