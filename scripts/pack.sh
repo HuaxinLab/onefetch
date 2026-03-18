@@ -60,6 +60,8 @@ zip -rq "$ARCHIVE_PATH" . \
   -x ".venv/*" \
   -x "data/*" \
   -x "reports/*" \
+  -x "release/*" \
+  -x "tests/*" \
   -x ".pytest_cache/*" \
   -x "dist/*" \
   -x "*/__pycache__/*" \
