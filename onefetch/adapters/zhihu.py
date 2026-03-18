@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import asyncio
 from datetime import datetime, timezone
 from html import unescape
 from urllib.parse import urlparse
@@ -9,7 +11,6 @@ from urllib.parse import urlparse
 from lxml import html
 
 from onefetch.adapters.base import BaseAdapter
-from onefetch.adapters.generic_html import GenericHtmlAdapter
 from onefetch.http import create_async_client
 from onefetch.models import Capture, CrawlOutput, FeedEntry
 from onefetch.router import normalize_url
@@ -28,6 +29,8 @@ class ZhihuAdapter(BaseAdapter):
         parsed = urlparse(url)
         host = (parsed.hostname or "").lower()
         path = parsed.path or "/"
+        if host == "zhuanlan.zhihu.com" and path.startswith("/p/"):
+            return True
         return host.endswith("zhihu.com") and path.startswith("/question/")
 
     async def crawl(self, url: str) -> CrawlOutput:
@@ -37,7 +40,11 @@ class ZhihuAdapter(BaseAdapter):
         tree = html.fromstring(body_text)
         state = self._extract_initial_state(body_text)
 
-        question_id, answer_id = self._extract_ids(final_url)
+        question_id, answer_id, article_id = self._extract_ids(url)
+        final_question_id, final_answer_id, final_article_id = self._extract_ids(final_url)
+        question_id = question_id or final_question_id
+        answer_id = answer_id or final_answer_id
+        article_id = article_id or final_article_id
         title = self._first_text(
             tree,
             [
@@ -52,6 +59,7 @@ class ZhihuAdapter(BaseAdapter):
             state,
             question_id,
             answer_id,
+            article_id,
         )
         if parsed_title:
             title = parsed_title
@@ -59,6 +67,12 @@ class ZhihuAdapter(BaseAdapter):
             author = parsed_author
         if not content:
             content = self._extract_fallback_body(tree)
+
+        if self._is_challenge_or_login_page(final_url, body_text) and self._looks_like_challenge_payload(title, content):
+            raise RuntimeError(
+                "risk.blocked: zhihu challenge/login page intercepted; "
+                "正文不可用（可配置 ONEFETCH_ZHIHU_COOKIE 后重试）"
+            )
 
         if title and title.endswith(" - 知乎"):
             title = title[: -len(" - 知乎")].strip()
@@ -95,16 +109,27 @@ class ZhihuAdapter(BaseAdapter):
         headers: dict[str, str] = {}
         render_mode = "http"
         browser_status: dict[str, str] = {"status": "skipped", "reason": "not_needed"}
+        request_headers = self._request_headers(url)
+        cookie_header = request_headers.get("cookie", "")
         try:
-            async with create_async_client(timeout=30, follow_redirects=True) as client:
+            async with create_async_client(timeout=30, follow_redirects=True, headers=request_headers) as client:
                 response = await client.get(url)
                 response.raise_for_status()
             final_url = str(response.url)
             body_text = response.text
             status_code = response.status_code
             headers = {k.lower(): v for k, v in response.headers.items()}
+            if self._is_challenge_or_login_page(final_url, body_text):
+                rendered_html, rendered_url, browser_status = await self._render_with_zhihu_browser(url, cookie_header)
+                if rendered_html:
+                    final_url = rendered_url or final_url
+                    body_text = rendered_html
+                    status_code = 200
+                    render_mode = "browser"
+                else:
+                    browser_status = {"status": "skipped", "reason": "browser_fallback_empty"}
         except Exception as exc:
-            rendered_html, rendered_url, browser_status = await GenericHtmlAdapter._render_with_browser(url)
+            rendered_html, rendered_url, browser_status = await self._render_with_zhihu_browser(url, cookie_header)
             if not rendered_html:
                 raise RuntimeError(f"zhihu fetch failed: {exc}") from exc
             final_url = rendered_url or final_url
@@ -112,6 +137,128 @@ class ZhihuAdapter(BaseAdapter):
             status_code = 200
             render_mode = "browser"
         return final_url, body_text, status_code, headers, render_mode, browser_status
+
+    @staticmethod
+    def _request_headers(url: str) -> dict[str, str]:
+        headers = {
+            "user-agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/131.0.0.0 Safari/537.36"
+            ),
+            "accept-language": "zh-CN,zh;q=0.9,en;q=0.8",
+            "referer": "https://zhuanlan.zhihu.com/",
+        }
+        cookie = os.getenv("ONEFETCH_ZHIHU_COOKIE", "").strip()
+        if cookie:
+            headers["cookie"] = cookie
+        return headers
+
+    @staticmethod
+    def _parse_cookie_pairs(cookie_header: str) -> list[tuple[str, str]]:
+        pairs: list[tuple[str, str]] = []
+        for item in (cookie_header or "").split(";"):
+            raw = item.strip()
+            if not raw or "=" not in raw:
+                continue
+            name, value = raw.split("=", 1)
+            name = name.strip()
+            value = value.strip()
+            if name:
+                pairs.append((name, value))
+        return pairs
+
+    async def _render_with_zhihu_browser(
+        self,
+        url: str,
+        cookie_header: str,
+    ) -> tuple[str | None, str, dict[str, str]]:
+        try:
+            from playwright.async_api import async_playwright
+        except Exception:
+            return None, url, {"status": "skipped", "reason": "playwright_not_installed"}
+
+        try:
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(
+                    headless=True,
+                    args=[
+                        "--disable-gpu",
+                        "--disable-dev-shm-usage",
+                        "--disable-blink-features=AutomationControlled",
+                        "--window-size=1280,800",
+                    ],
+                )
+                context = await browser.new_context(
+                    user_agent=(
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/131.0.0.0 Safari/537.36"
+                    ),
+                    viewport={"width": 1280, "height": 800},
+                    locale="zh-CN",
+                    extra_http_headers={
+                        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+                        "Referer": "https://zhuanlan.zhihu.com/",
+                    },
+                )
+                cookie_pairs = self._parse_cookie_pairs(cookie_header)
+                if cookie_pairs:
+                    cookies = [
+                        {
+                            "name": name,
+                            "value": value,
+                            "domain": ".zhihu.com",
+                            "path": "/",
+                            "secure": True,
+                            "httpOnly": False,
+                        }
+                        for name, value in cookie_pairs
+                    ]
+                    await context.add_cookies(cookies)
+                page = await context.new_page()
+                await page.add_init_script(
+                    """
+                    Object.defineProperty(navigator, 'webdriver', { get: () => false });
+                    Object.defineProperty(navigator, 'languages', { get: () => ['zh-CN', 'zh', 'en'] });
+                    Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3] });
+                    window.chrome = { runtime: {} };
+                    """
+                )
+
+                try:
+                    await page.goto(url, wait_until="networkidle", timeout=45000)
+                    load_mode = "networkidle"
+                except Exception:
+                    await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                    await asyncio.sleep(3)
+                    load_mode = "domcontentloaded"
+
+                close_selectors = [
+                    "button.Modal-closeButton",
+                    ".Modal-closeButton",
+                    "button[aria-label='关闭']",
+                    "button:has-text('关闭')",
+                    "button:has-text('暂不登录')",
+                ]
+                for selector in close_selectors:
+                    try:
+                        loc = page.locator(selector).first
+                        if await loc.count() > 0:
+                            await loc.click(timeout=1000)
+                            await asyncio.sleep(0.3)
+                            break
+                    except Exception:
+                        continue
+
+                await asyncio.sleep(1.0)
+                html_text = await page.content()
+                final_url = page.url
+                await context.close()
+                await browser.close()
+                return html_text, final_url, {"status": "ok", "load_mode": load_mode}
+        except Exception as exc:
+            return None, url, {"status": "failed", "reason": str(exc)}
 
     @staticmethod
     def _extract_initial_state(html_text: str) -> dict | None:
@@ -127,22 +274,46 @@ class ZhihuAdapter(BaseAdapter):
             return None
 
     @staticmethod
-    def _extract_ids(url: str) -> tuple[str | None, str | None]:
+    def _extract_ids(url: str) -> tuple[str | None, str | None, str | None]:
         path = urlparse(url).path or ""
+        article_match = re.search(r"^/p/(\d+)", path)
+        if article_match:
+            return None, None, article_match.group(1)
         match = re.search(r"^/question/(\d+)(?:/answer/(\d+))?", path)
         if not match:
-            return None, None
-        return match.group(1), match.group(2)
+            return None, None, None
+        return match.group(1), match.group(2), None
 
     async def _build_from_state(
         self,
         state: dict | None,
         question_id: str | None,
         answer_id: str | None,
+        article_id: str | None,
     ) -> tuple[str, str | None, str | None, datetime | None, dict]:
         entities = (((state or {}).get("initialState") or {}).get("entities")) or {}
+        articles = entities.get("articles") or {}
         questions = entities.get("questions") or {}
         answers = entities.get("answers") or {}
+
+        if article_id:
+            article = articles.get(article_id) or articles.get(str(article_id))
+            if not isinstance(article, dict):
+                return "", None, None, None, {"content_type": "zhuanlan_article", "parse_state": "article_not_found"}
+            article_title = (article.get("title") or "").strip() or None
+            article_content = self._html_to_text(article.get("content") or "")
+            if not article_content:
+                article_content = self._html_to_text(article.get("excerpt") or "") or ""
+            article_author = ((article.get("author") or {}).get("name") or "").strip() or None
+            published_at = self._parse_epoch(article.get("updated") or article.get("created"))
+            metadata = {
+                "content_type": "zhuanlan_article",
+                "article_id": str(article.get("id") or article_id),
+                "voteup_count": article.get("voteupCount"),
+                "comment_count": article.get("commentCount"),
+                "column_name": ((article.get("column") or {}).get("name") or None),
+            }
+            return article_content, article_title, article_author, published_at, metadata
 
         if answer_id:
             answer = answers.get(answer_id) or answers.get(str(answer_id))
@@ -249,12 +420,41 @@ class ZhihuAdapter(BaseAdapter):
 
     @staticmethod
     def _extract_fallback_body(tree: html.HtmlElement) -> str:
-        candidates = tree.xpath("//main") or tree.xpath("//article") or tree.xpath("//body")
+        candidates = (
+            tree.xpath("//article[contains(@class,'Post-RichText')]")
+            or tree.xpath("//article")
+            or tree.xpath("//main")
+            or tree.xpath("//body")
+        )
         if not candidates:
             return ""
         text = candidates[0].text_content()
         text = re.sub(r"\n\s*\n+", "\n\n", text)
         return text.strip()[:60000]
+
+    @staticmethod
+    def _is_challenge_or_login_page(final_url: str, body_text: str) -> bool:
+        url_lower = (final_url or "").lower()
+        body_lower = (body_text or "").lower()
+        if "/account/unhuman" in url_lower or "need_login=true" in url_lower:
+            return True
+        keywords = [
+            "安全验证",
+            "请您登录后查看更多专业优质内容",
+            "登录/注册",
+        ]
+        return any(keyword.lower() in body_lower for keyword in keywords)
+
+    @staticmethod
+    def _looks_like_challenge_payload(title: str | None, content: str) -> bool:
+        text = " ".join([title or "", content or ""]).lower()
+        markers = [
+            "安全验证",
+            "请您登录后查看更多专业优质内容",
+            "登录/注册",
+            "account/unhuman",
+        ]
+        return any(marker.lower() in text for marker in markers)
 
     @staticmethod
     def _html_to_text(raw_html: str) -> str:

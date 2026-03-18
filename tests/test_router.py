@@ -23,6 +23,12 @@ def test_route_zhihu_url_to_zhihu_adapter() -> None:
     assert adapter.id == "zhihu"
 
 
+def test_route_zhihu_zhuanlan_url_to_zhihu_adapter() -> None:
+    router = Router([XiaohongshuAdapter(), WechatAdapter(), ZhihuAdapter(), GenericHtmlAdapter()])
+    adapter = router.route("https://zhuanlan.zhihu.com/p/2016268919397196245")
+    assert adapter.id == "zhihu"
+
+
 def test_route_fallback_to_generic_html() -> None:
     router = Router([XiaohongshuAdapter(), WechatAdapter(), ZhihuAdapter(), GenericHtmlAdapter()])
     adapter = router.route("https://example.com/article")
