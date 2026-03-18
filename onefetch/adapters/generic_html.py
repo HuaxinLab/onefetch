@@ -105,6 +105,7 @@ class GenericHtmlAdapter(BaseAdapter):
             author=author,
             published_at=published_at,
             body=content,
+            raw_body=body_text,
             metadata={
                 "content_type": headers.get("content-type", ""),
                 "render_mode": "browser" if used_browser else "http",

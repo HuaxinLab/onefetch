@@ -85,6 +85,7 @@ class ZhihuAdapter(BaseAdapter):
             author=author,
             published_at=published_at,
             body=content[:60000],
+            raw_body=body_text,
             metadata={
                 "platform": "zhihu",
                 "render_mode": render_mode,

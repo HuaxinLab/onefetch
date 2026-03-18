@@ -77,6 +77,7 @@ class XiaohongshuAdapter(BaseAdapter):
             author=author,
             published_at=published_at,
             body=content or "",
+            raw_body=body_text,
             comments=comments,
             metadata=metadata,
         )

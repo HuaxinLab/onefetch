@@ -76,6 +76,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ingest.add_argument("--store", action="store_true", help="Persist artifacts to data/ and catalog")
     ingest.add_argument("--present", action="store_true", help="Print normalized presentation blocks for LLM summarization")
+    ingest.add_argument("--raw", action="store_true", help="Save raw HTML to reports/raw/ for further processing")
 
     backfill = sub.add_parser("cache-backfill", help="Backfill LLM outputs into an existing cache entry")
     backfill.add_argument("url", help="The URL whose cache entry to update")
@@ -356,6 +357,35 @@ def _print_present(report) -> None:
         print()
 
 
+async def _run_raw_fetch(
+    urls: list[str],
+    router: Router,
+    paths,
+    forced_adapter: str | None = None,
+) -> int:
+    """Fetch URLs and save raw HTML to reports/raw/."""
+    raw_dir = paths.reports_dir / "raw"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+
+    for url in urls:
+        try:
+            adapter = router.route(url, forced_adapter=forced_adapter)
+            feed = await adapter.crawl(url)
+            if not feed.raw_body:
+                print(f"[raw] no raw body for: {url}")
+                continue
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+            safe_id = feed.content_hash[:8] if feed.content_hash else "unknown"
+            filename = f"{stamp}-{safe_id}.html"
+            path = raw_dir / filename
+            path.write_text(feed.raw_body, encoding="utf-8")
+            print(f"[raw] {adapter.id} | {feed.title or url}")
+            print(f"[raw] saved: {path} ({len(feed.raw_body)} bytes)")
+        except Exception as exc:
+            print(f"[raw] failed: {url} — {exc}")
+    return 0
+
+
 async def run_ingest(args: argparse.Namespace) -> int:
     adapters = create_default_adapters()
     router = Router(adapters)
@@ -372,6 +402,10 @@ async def run_ingest(args: argparse.Namespace) -> int:
 
     config = OneFetchConfig.from_project_root(args.project_root)
     paths = config.paths()
+
+    if args.raw:
+        return await _run_raw_fetch(urls, router, paths, forced_adapter=args.crawler or None)
+
     cache_service = TempCacheService(paths, max_entries=args.cache_max_items) if args.cache_temp else None
     pipeline = IngestionPipeline(router=router)
 

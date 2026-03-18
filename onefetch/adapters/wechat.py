@@ -63,6 +63,7 @@ class WechatAdapter(BaseAdapter):
             author=author,
             published_at=published_at,
             body=content,
+            raw_body=body_text,
             metadata={
                 "platform": "wechat",
                 "content_type": "wechat_article",

@@ -30,6 +30,7 @@ class FeedEntry(BaseModel):
     author: str | None = None
     published_at: datetime | None = None
     body: str = ""
+    raw_body: str = ""
     comments: list[FeedComment] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
     content_hash: str = ""

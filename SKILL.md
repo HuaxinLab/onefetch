@@ -52,6 +52,21 @@ agent 不需要手动选择适配器，router 根据 URL 自动路由。
    这样缓存第一时间就是完整的，后续任何操作（翻译、保存、再次查看）都能直接复用。
 8. 若 `--store` 时 `llm_outputs_state` 为 `fallback` 或 `missing`，onefetch 会自动用规则从正文重新生成。agent 需用通俗语言提醒：正文已保存，但摘要 / 要点 / 标签为自动整理结果，可能不够准确；用户可稍后要求"重新整理"再覆盖。
 
+### 获取原始 HTML（--raw）
+
+9. 当需要原始 HTML 数据（如提取图片 URL、分析页面结构、调试抓取问题）时，使用 `--raw` 模式：
+   ```bash
+   bash scripts/run_cli.sh ingest --raw "URL"
+   ```
+   原始 HTML 保存到 `reports/raw/<timestamp>.html`，不进入缓存。agent 可按需处理文件，避免将大量 HTML 加载到上下文：
+   ```bash
+   # 提取图片 URL
+   grep 'og:image' reports/raw/<file>.html
+   # 查看页面结构
+   head -100 reports/raw/<file>.html
+   ```
+   `--raw` 模式走完整的 adapter 流程（Cookie、反爬、Playwright 降级），只是输出原始 HTML 而非提取后的纯文本。
+
 ### 平台特殊处理
 
 10. **小红书评论**：默认不抓取评论。仅在用户需要评论时启用 `ONEFETCH_XHS_COMMENT_MODE='state+api'`。若用户未配置评论 Cookie，引导用户配置（见下方 Cookie 配置说明）。
@@ -213,6 +228,9 @@ bash scripts/run_cli.sh ingest --store --from-cache "URL"
 # LLM 整理完内容后，立刻回填到缓存
 bash scripts/run_cli.sh cache-backfill "URL" \
   --json-data '{"summary":"...","key_points":["..."],"tags":["..."]}'
+
+# 获取原始 HTML（提取图片、分析页面结构等）
+bash scripts/run_cli.sh ingest --raw "URL"
 
 # 查看可用适配器
 bash scripts/run_cli.sh ingest --list-crawlers
