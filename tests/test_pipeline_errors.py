@@ -7,6 +7,7 @@ from onefetch.router import Router
 
 class TimeoutAdapter(BaseAdapter):
     id = "timeout"
+    register = False
 
     def supports(self, url: str) -> bool:
         return True
