@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 
 from lxml import html
 
-from onefetch.adapters.base import BaseAdapter
+from onefetch.adapters.base import BaseAdapter, node_to_text
 from onefetch.http import create_async_client
 from onefetch.models import Capture, CrawlOutput, FeedEntry
 from onefetch.router import normalize_url
@@ -230,9 +230,7 @@ class WechatAdapter(BaseAdapter):
             parent = unwanted.getparent()
             if parent is not None:
                 parent.remove(unwanted)
-        text = clone.text_content()
-        text = re.sub(r"\n\s*\n+", "\n\n", text)
-        return text.strip()
+        return node_to_text(clone)
 
     @staticmethod
     def _sanitize_content(text: str) -> tuple[str, dict[str, int]]:

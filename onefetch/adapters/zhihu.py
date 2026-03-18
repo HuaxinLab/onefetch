@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 
 from lxml import html
 
-from onefetch.adapters.base import BaseAdapter
+from onefetch.adapters.base import BaseAdapter, node_to_text
 from onefetch.http import create_async_client
 from onefetch.models import Capture, CrawlOutput, FeedEntry
 from onefetch.router import normalize_url
@@ -436,9 +436,7 @@ class ZhihuAdapter(BaseAdapter):
         )
         if not candidates:
             return ""
-        text = candidates[0].text_content()
-        text = re.sub(r"\n\s*\n+", "\n\n", text)
-        return text.strip()[:60000]
+        return node_to_text(candidates[0])[:60000]
 
     @staticmethod
     def _is_challenge_or_login_page(final_url: str, body_text: str) -> bool:
@@ -470,13 +468,9 @@ class ZhihuAdapter(BaseAdapter):
             return ""
         try:
             node = html.fromstring(f"<div>{raw_html}</div>")
-            text = node.text_content()
+            return node_to_text(node)
         except Exception:
-            text = raw_html
-        text = text.replace("\u00a0", " ")
-        text = re.sub(r"\n\s*\n+", "\n\n", text)
-        lines = [line.strip() for line in text.splitlines()]
-        return "\n".join(line for line in lines if line).strip()
+            return raw_html.strip()
 
     @staticmethod
     def _first_text(tree: html.HtmlElement, xpaths: list[str]) -> str | None:

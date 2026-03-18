@@ -1,9 +1,37 @@
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
 from typing import ClassVar
 
+from lxml import html as lxml_html
+
 from onefetch.models import CrawlOutput
+
+
+_BLOCK_TAGS = frozenset({
+    "p", "div", "br", "h1", "h2", "h3", "h4", "h5", "h6",
+    "li", "tr", "blockquote", "pre", "section", "article",
+})
+
+
+def node_to_text(node: lxml_html.HtmlElement) -> str:
+    """Extract text from an lxml element, preserving block-level line breaks."""
+    for el in node.iter():
+        if el.tag in _BLOCK_TAGS:
+            if el.text:
+                el.text = "\n" + el.text
+            else:
+                el.text = "\n"
+            if el.tail:
+                el.tail = el.tail + "\n"
+            else:
+                el.tail = "\n"
+    text = node.text_content()
+    text = text.replace("\u00a0", " ")
+    text = re.sub(r"\n\s*\n+", "\n\n", text)
+    lines = [line.strip() for line in text.splitlines()]
+    return "\n".join(line for line in lines if line).strip()
 
 
 class BaseAdapter(ABC):

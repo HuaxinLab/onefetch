@@ -7,7 +7,7 @@ from datetime import datetime
 
 from lxml import html
 
-from onefetch.adapters.base import BaseAdapter
+from onefetch.adapters.base import BaseAdapter, node_to_text
 from onefetch.http import create_async_client
 from onefetch.models import Capture, CrawlOutput, FeedEntry
 from onefetch.router import normalize_url
@@ -161,9 +161,7 @@ class GenericHtmlAdapter(BaseAdapter):
         candidates = cleaned.xpath("//article") or cleaned.xpath("//main") or cleaned.xpath("//body")
         if not candidates:
             return ""
-        text = candidates[0].text_content()
-        text = re.sub(r"\n\s*\n+", "\n\n", text)
-        return text.strip()[:20000]
+        return node_to_text(candidates[0])[:20000]
 
     @staticmethod
     def _needs_browser_fallback(content: str, body_text: str) -> bool:
