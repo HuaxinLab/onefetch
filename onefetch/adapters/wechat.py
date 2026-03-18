@@ -55,6 +55,8 @@ class WechatAdapter(BaseAdapter):
                     "WeChat page requires browser rendering but Playwright is not installed."
                 )
 
+        images = self._extract_images(tree)
+
         return FeedEntry(
             source_url=url,
             canonical_url=canonical,
@@ -64,6 +66,7 @@ class WechatAdapter(BaseAdapter):
             published_at=published_at,
             body=content,
             raw_body=body_text,
+            images=images,
             metadata={
                 "platform": "wechat",
                 "content_type": "wechat_article",
@@ -214,6 +217,20 @@ class WechatAdapter(BaseAdapter):
                 if stripped:
                     return stripped
         return None
+
+    @staticmethod
+    def _extract_images(tree: html.HtmlElement) -> list[str]:
+        urls: list[str] = []
+        seen: set[str] = set()
+        content_block = tree.xpath("//*[@id='js_content']")
+        root = content_block[0] if content_block else tree
+        for xpath in [".//img/@data-src", ".//img/@src"]:
+            for val in root.xpath(xpath):
+                val = (val or "").strip()
+                if val and val.startswith("http") and "svg+xml" not in val and val not in seen:
+                    seen.add(val)
+                    urls.append(val)
+        return urls[:30]
 
     @staticmethod
     def _clean_text_from_node(node: html.HtmlElement) -> str:

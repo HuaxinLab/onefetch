@@ -83,6 +83,14 @@ def build_parser() -> argparse.ArgumentParser:
     backfill.add_argument("--json-data", default="", help='LLM outputs as JSON string: {"summary":"...","key_points":["..."],"tags":["..."]}')
     backfill.add_argument("--project-root", default=".", help="Project root (default: current directory)")
 
+    images = sub.add_parser("images", help="Extract image URLs from a page")
+    images.add_argument("inputs", nargs="*", help="URL(s)")
+    images.add_argument("--text", default="", help="Optional free text to scan for URLs")
+    images.add_argument("--crawler", default="", help="Force adapter id")
+    images.add_argument("--proxy", action="store_true", help="Output wsrv.nl proxied URLs")
+    images.add_argument("--download", default="", help="Download images to specified directory")
+    images.add_argument("--project-root", default=".", help="Project root (default: current directory)")
+
     plugin = sub.add_parser("plugin", help="Run independent plugins")
     plugin_sub = plugin.add_subparsers(dest="plugin_command", required=True)
 
@@ -665,12 +673,66 @@ def run_cache_backfill(args: argparse.Namespace) -> int:
     return 0
 
 
+async def run_images(args: argparse.Namespace) -> int:
+    """Extract image URLs from one or more pages."""
+    adapters = create_default_adapters()
+    router = Router(adapters)
+    urls = extract_urls(args.inputs, args.text)
+    if not urls:
+        print("No URLs found.")
+        return 2
+
+    download_dir = Path(args.download).expanduser() if args.download else None
+    if download_dir:
+        download_dir.mkdir(parents=True, exist_ok=True)
+
+    for url in urls:
+        try:
+            adapter = router.route(url, forced_adapter=args.crawler or None)
+            feed = await adapter.crawl(url)
+            if not feed.images:
+                print(f"[images] {adapter.id} | {feed.title or url} | 0 images")
+                continue
+            print(f"[images] {adapter.id} | {feed.title or url} | {len(feed.images)} images")
+            for i, img_url in enumerate(feed.images):
+                if args.proxy:
+                    import urllib.parse
+                    proxied = f"https://wsrv.nl/?url={urllib.parse.quote(img_url, safe='')}"
+                    print(proxied)
+                else:
+                    print(img_url)
+
+                if download_dir:
+                    await _download_image(img_url, download_dir, index=i + 1)
+        except Exception as exc:
+            print(f"[images] failed: {url} — {exc}")
+    return 0
+
+
+async def _download_image(url: str, output_dir: Path, *, index: int) -> None:
+    try:
+        from onefetch.http import create_async_client
+        async with create_async_client(timeout=30, follow_redirects=True) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+        ct = response.headers.get("content-type", "image/jpeg")
+        ext = ".webp" if "webp" in ct else ".png" if "png" in ct else ".gif" if "gif" in ct else ".jpg"
+        filename = f"{index:03d}{ext}"
+        path = output_dir / filename
+        path.write_bytes(response.content)
+        print(f"  saved: {path} ({len(response.content)} bytes)")
+    except Exception as exc:
+        print(f"  download failed: {url} — {exc}")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
     if args.command == "ingest":
         return asyncio.run(run_ingest(args))
+    if args.command == "images":
+        return asyncio.run(run_images(args))
     if args.command == "cache-backfill":
         return run_cache_backfill(args)
     if args.command == "plugin":

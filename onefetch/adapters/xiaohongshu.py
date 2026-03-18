@@ -69,6 +69,8 @@ class XiaohongshuAdapter(BaseAdapter):
             "dom": dom_status,
         }
 
+        images = self._extract_images(state, final_url)
+
         return FeedEntry(
             source_url=url,
             canonical_url=canonical,
@@ -78,6 +80,7 @@ class XiaohongshuAdapter(BaseAdapter):
             published_at=published_at,
             body=content or "",
             raw_body=body_text,
+            images=images,
             comments=comments,
             metadata=metadata,
         )
@@ -184,6 +187,18 @@ class XiaohongshuAdapter(BaseAdapter):
             title = title[:-6].strip()
 
         return title, author, description, published_at, metadata, comments
+
+    def _extract_images(self, state: dict | None, final_url: str) -> list[str]:
+        note_detail = self._pick_note_detail(state, final_url)
+        if not note_detail:
+            return []
+        note = note_detail.get("note") or {}
+        images: list[str] = []
+        for img in note.get("imageList") or []:
+            url = (img.get("urlDefault") or img.get("url") or "").strip()
+            if url and url.startswith("http"):
+                images.append(url)
+        return images
 
     @staticmethod
     def _comment_mode_flags() -> dict[str, object]:

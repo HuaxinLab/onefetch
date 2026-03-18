@@ -97,6 +97,7 @@ class GenericHtmlAdapter(BaseAdapter):
             content = body_text[:5000]
 
         canonical = normalize_url(final_url)
+        images = self._extract_images(tree) if body_text else []
         return FeedEntry(
             source_url=url,
             canonical_url=canonical,
@@ -106,6 +107,7 @@ class GenericHtmlAdapter(BaseAdapter):
             published_at=published_at,
             body=content,
             raw_body=body_text,
+            images=images,
             metadata={
                 "content_type": headers.get("content-type", ""),
                 "render_mode": "browser" if used_browser else "http",
@@ -154,6 +156,18 @@ class GenericHtmlAdapter(BaseAdapter):
         if not candidates:
             return ""
         return node_to_text(candidates[0])[:20000]
+
+    @staticmethod
+    def _extract_images(tree: html.HtmlElement) -> list[str]:
+        urls: list[str] = []
+        seen: set[str] = set()
+        for xpath in ["//meta[@property='og:image']/@content", "//img/@data-src", "//img/@src"]:
+            for val in tree.xpath(xpath):
+                val = (val or "").strip()
+                if val and val.startswith("http") and "svg+xml" not in val and "1px" not in val and val not in seen:
+                    seen.add(val)
+                    urls.append(val)
+        return urls[:30]
 
     @staticmethod
     def _needs_browser_fallback(content: str, body_text: str) -> bool:

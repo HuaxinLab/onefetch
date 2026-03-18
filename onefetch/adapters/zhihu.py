@@ -77,6 +77,8 @@ class ZhihuAdapter(BaseAdapter):
         if title and title.endswith(" - 知乎"):
             title = title[: -len(" - 知乎")].strip()
 
+        images = self._extract_images(tree)
+
         return FeedEntry(
             source_url=url,
             canonical_url=canonical,
@@ -86,6 +88,7 @@ class ZhihuAdapter(BaseAdapter):
             published_at=published_at,
             body=content[:60000],
             raw_body=body_text,
+            images=images,
             metadata={
                 "platform": "zhihu",
                 "render_mode": render_mode,
@@ -417,6 +420,18 @@ class ZhihuAdapter(BaseAdapter):
         if "阅读全文" in normalized:
             return True
         return len(normalized) < 220
+
+    @staticmethod
+    def _extract_images(tree: html.HtmlElement) -> list[str]:
+        urls: list[str] = []
+        seen: set[str] = set()
+        for xpath in ["//meta[@property='og:image']/@content", "//img/@data-original", "//img/@data-actualsrc", "//img/@src"]:
+            for val in tree.xpath(xpath):
+                val = (val or "").strip()
+                if val and val.startswith("http") and "svg+xml" not in val and "data:image" not in val and val not in seen:
+                    seen.add(val)
+                    urls.append(val)
+        return urls[:30]
 
     @staticmethod
     def _extract_fallback_body(tree: html.HtmlElement) -> str:
