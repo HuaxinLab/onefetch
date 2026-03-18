@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from onefetch.plugins.base import Plugin, PluginResult, PluginTask
 from onefetch.plugins.extract_css_attr import ExtractCssAttrPlugin
+from onefetch.plugins.extract_html_js_jsonp import ExtractHtmlJsJsonpPlugin
 from onefetch.plugins.extract_jsonp_field import ExtractJsonpFieldPlugin
 
 
@@ -33,6 +34,7 @@ def create_default_registry() -> PluginRegistry:
     return PluginRegistry(
         plugins=[
             ExtractCssAttrPlugin(),
+            ExtractHtmlJsJsonpPlugin(),
             ExtractJsonpFieldPlugin(),
         ]
     )

@@ -49,10 +49,19 @@ argument-hint: [url-or-free-text]
   - `callback`：默认 `callback`
   - `field`：默认 `img_url`
 
+3. `extract_html_js_jsonp`
+- 作用：链路提取（HTML -> JS -> JSONP 字段）。
+- 适用：目标值不在 HTML，需要先从 HTML 定位 JS，再从 JS 找 JSONP 地址，最后取字段。
+- 关键参数：
+  - `callback`：默认 `img_url`
+  - `field`：默认 `img_url`
+  - `append_version`：`true/false`，是否拼接 `?v=...`
+  - 可选直传：`html`、`js_body`、`jsonp_body`（便于调试/离线测试）
+
 选型规则：
 - 页面 DOM 属性/文本提取：优先 `extract_css_attr`
 - JSONP 字段提取：优先 `extract_jsonp_field`
-- 需要“先抓 HTML 再追 JS/接口再提取”的链路：当前插件不足，先用脚本方案，并在回复里说明可新增插件能力
+- 需要“先抓 HTML 再追 JS/接口再提取”的链路：优先 `extract_html_js_jsonp`
 
 ## Agent 常用命令
 
@@ -103,6 +112,13 @@ bash scripts/run_ingest.sh --present --refresh "https://zhuanlan.zhihu.com/p/...
   --opt jsonp_url="https://example.com/api.js?callback=img_url" \
   --opt callback=img_url \
   --opt field=img_url
+
+# 插件运行：链路提取（HTML -> JS -> JSONP -> 字段）
+.venv/bin/python -m onefetch.cli plugin run extract_html_js_jsonp \
+  --url "https://www.dingtalk.com/wukong" \
+  --opt callback=img_url \
+  --opt field=img_url \
+  --opt append_version=true
 ```
 
 ## 参考文档

@@ -5,6 +5,7 @@ def test_default_registry_contains_expected_plugins() -> None:
     registry = create_default_registry()
     plugin_ids = [plugin.id for plugin in registry.list_plugins()]
     assert "extract_css_attr" in plugin_ids
+    assert "extract_html_js_jsonp" in plugin_ids
     assert "extract_jsonp_field" in plugin_ids
 
 
@@ -36,3 +37,28 @@ def test_extract_jsonp_field_plugin_with_inline_body() -> None:
     result = registry.run(task)
     assert result.ok is True
     assert result.value == "https://example.com/a.png"
+
+
+def test_extract_html_js_jsonp_chain_with_inline_inputs() -> None:
+    registry = create_default_registry()
+    html = '<script src="//cdn.dingtalkapps.com/dingding/wukong_office_network/0.2.10/wukong/abc.js"></script>'
+    js = (
+        'var x="https://hudong.alicdn.com/api/data/v2/438eae9715f945468d599660d2d92aeb.js?t=";'
+        'var b={imageUrl:"https://fallback.example.com/default.png",version:"8"};'
+    )
+    jsonp = 'img_url({"img_url":"https://example.com/live.png"})'
+    task = PluginTask(
+        plugin_id="extract_html_js_jsonp",
+        options={
+            "html": html,
+            "js_body": js,
+            "jsonp_body": jsonp,
+            "callback": "img_url",
+            "field": "img_url",
+            "append_version": "true",
+            "ts": "123",
+        },
+    )
+    result = registry.run(task)
+    assert result.ok is True
+    assert result.value == "https://example.com/live.png?v=8"

@@ -7,6 +7,7 @@ def test_plugin_list_command_outputs_builtin_plugins(capsys) -> None:
 
     assert exit_code == 0
     assert "extract_css_attr" in out
+    assert "extract_html_js_jsonp" in out
     assert "extract_jsonp_field" in out
 
 
