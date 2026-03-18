@@ -96,7 +96,7 @@ ln -s /path/to/onefetch ~/.claude/skills/onefetch
    - **F12 开发者工具**：Network → 点击任意请求 → Headers → 复制 `Cookie:` 的值
    - **浏览器插件**：Cookie-Editor（导出选 Header String）、Get cookies.txt 等
 3. 复制后直接运行配置脚本（自动读取剪贴板，按 Enter 确认即可）
-   - 内置平台：`bash scripts/setup_cookie.sh zhihu` 或 `xhs`
+   - 示例：`bash scripts/setup_cookie.sh zhihu.com`、`xiaohongshu.com`、`bilibili.com`
    - 任意网站：`bash scripts/setup_cookie.sh example.com`（填域名即可）
 
 > 注意：Cookie 格式必须是 Header String（`key=value; key=value; ...`）。

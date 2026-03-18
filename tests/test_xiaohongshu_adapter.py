@@ -78,9 +78,12 @@ class _FakeClientContext:
         return None
 
 
-async def test_fetch_comments_pagination_and_dedup(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_fetch_comments_pagination_and_dedup(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     adapter = XiaohongshuAdapter()
-    monkeypatch.setenv("ONEFETCH_XHS_COOKIE", "session=ok")
+    secrets_dir = tmp_path / ".secrets"
+    secrets_dir.mkdir()
+    (secrets_dir / "xiaohongshu.com_cookie.txt").write_text("session=ok")
+    monkeypatch.setenv("ONEFETCH_PROJECT_ROOT", str(tmp_path))
     monkeypatch.setenv("ONEFETCH_XHS_COMMENT_MAX_PAGES", "5")
     monkeypatch.setenv("ONEFETCH_XHS_COMMENT_MAX_ITEMS", "50")
 

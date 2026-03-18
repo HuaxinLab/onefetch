@@ -194,13 +194,12 @@ class BilibiliAdapter(BaseAdapter):
 
     @staticmethod
     def _load_cookie() -> str:
-        cookie = os.getenv("ONEFETCH_BILIBILI_COOKIE", "").strip()
-        if cookie:
-            return cookie
         project_root = Path(os.getenv("ONEFETCH_PROJECT_ROOT", ".")).resolve()
-        cookie_file = project_root / ".secrets" / "www.bilibili.com_cookie.txt"
-        if cookie_file.is_file():
-            return cookie_file.read_text(encoding="utf-8").strip()
+        secrets_dir = project_root / ".secrets"
+        for name in ["bilibili.com_cookie.txt", "www.bilibili.com_cookie.txt"]:
+            path = secrets_dir / name
+            if path.is_file():
+                return path.read_text(encoding="utf-8").strip()
         return ""
 
     @staticmethod

@@ -106,13 +106,13 @@ Plugin 运维命令：
 ### 小红书评论 Cookie
 
 ```bash
-bash scripts/setup_cookie.sh xhs
+bash scripts/setup_cookie.sh xiaohongshu.com
 ```
 
 ### 知乎 Cookie（专栏 `risk.blocked` 时）
 
 ```bash
-bash scripts/setup_cookie.sh zhihu
+bash scripts/setup_cookie.sh zhihu.com
 ```
 
 说明：

@@ -3,41 +3,26 @@ set -euo pipefail
 
 PROJECT_ROOT="${ONEFETCH_PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
-# --- Platform config ---
-platform="${1:-}"
+domain="${1:-}"
 
-if [[ -z "$platform" ]]; then
-  echo "Usage: bash scripts/setup_cookie.sh <platform|domain>"
+if [[ -z "$domain" ]]; then
+  echo "Usage: bash scripts/setup_cookie.sh <域名>"
   echo ""
-  echo "内置平台: zhihu, xhs"
-  echo "任意域名: bash scripts/setup_cookie.sh example.com"
+  echo "示例:"
+  echo "  bash scripts/setup_cookie.sh zhihu.com"
+  echo "  bash scripts/setup_cookie.sh xiaohongshu.com"
+  echo "  bash scripts/setup_cookie.sh www.bilibili.com"
+  echo "  bash scripts/setup_cookie.sh example.com"
   exit 1
 fi
 
-case "$platform" in
-  zhihu)
-    cookie_file="zhihu_cookie.txt"
-    run_hint="bash scripts/run_cli.sh ingest --present --refresh '<zhihu-url>'"
-    ;;
-  xhs)
-    cookie_file="xhs_cookie.txt"
-    run_hint="ONEFETCH_XHS_COMMENT_MODE='state+api' bash scripts/run_cli.sh ingest '<xhs-url>'"
-    ;;
-  *)
-    # 任意域名
-    cookie_file="${platform}_cookie.txt"
-    run_hint="bash scripts/run_cli.sh ingest --present '<${platform}-url>'"
-    ;;
-esac
-
-COOKIE_FILE="${PROJECT_ROOT}/.secrets/${cookie_file}"
+COOKIE_FILE="${PROJECT_ROOT}/.secrets/${domain}_cookie.txt"
 
 mkdir -p "$(dirname "$COOKIE_FILE")"
 chmod 700 "$(dirname "$COOKIE_FILE")" || true
 
 # --- Read cookie ---
 if [[ ! -t 0 ]]; then
-  # stdin is redirected (pipe / file)
   cookie_content="$(cat | tr -d '\r\n' | sed 's/^ *//; s/ *$//')"
 elif command -v pbpaste &>/dev/null; then
   echo "Copy the cookie to clipboard, then press Enter to confirm."
@@ -58,17 +43,16 @@ fi
 
 # --- Validate & save ---
 if [[ -z "$cookie_content" ]]; then
-  echo "[setup_cookie:${platform}] empty input, aborted"
+  echo "[setup_cookie:${domain}] empty input, aborted"
   exit 1
 fi
 
 if [[ "$cookie_content" != *"="* || "$cookie_content" != *";"* ]]; then
-  echo "[setup_cookie:${platform}] not a valid cookie header string"
+  echo "[setup_cookie:${domain}] not a valid cookie header string"
   exit 2
 fi
 
 printf '%s\n' "$cookie_content" > "$COOKIE_FILE"
 chmod 600 "$COOKIE_FILE" || true
 
-echo "[setup_cookie:${platform}] saved (${#cookie_content} chars) → $COOKIE_FILE"
-echo "[setup_cookie:${platform}] run with: ${run_hint}"
+echo "[setup_cookie:${domain}] saved (${#cookie_content} chars) → $COOKIE_FILE"

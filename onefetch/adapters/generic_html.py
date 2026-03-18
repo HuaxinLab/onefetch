@@ -131,11 +131,6 @@ class GenericHtmlAdapter(BaseAdapter):
     @staticmethod
     def _load_cookie(url: str) -> str:
         """Load cookie from .secrets/<domain>_cookie.txt if exists."""
-        # 先检查环境变量
-        cookie = os.getenv("ONEFETCH_COOKIE", "").strip()
-        if cookie:
-            return cookie
-        # 按域名查找 cookie 文件
         domain = (urlparse(url).hostname or "").lower()
         if not domain:
             return ""

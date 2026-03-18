@@ -96,7 +96,7 @@ Some platforms and login-required sites need a one-time Cookie configuration (Bi
    - **F12 DevTools**: Network tab → click any request → Headers → copy the `Cookie:` value
    - **Browser extension**: Cookie-Editor (export as Header String), Get cookies.txt, etc.
 3. Copy the Cookie, then run the setup script (it reads from clipboard automatically, just press Enter to confirm)
-   - Built-in platforms: `bash scripts/setup_cookie.sh zhihu` or `xhs`
+   - Examples: `bash scripts/setup_cookie.sh zhihu.com`, `xiaohongshu.com`, `bilibili.com`
    - Any website: `bash scripts/setup_cookie.sh example.com` (use the domain name)
 
 > Note: Cookie must be in **Header String** format (`key=value; key=value; ...`), NOT Netscape/curl format.

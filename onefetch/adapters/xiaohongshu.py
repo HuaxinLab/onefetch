@@ -7,6 +7,7 @@ import random
 import re
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from urllib.parse import urlparse
 
 from lxml import html
@@ -201,6 +202,16 @@ class XiaohongshuAdapter(BaseAdapter):
         return images
 
     @staticmethod
+    def _load_cookie() -> str:
+        project_root = Path(os.getenv("ONEFETCH_PROJECT_ROOT", ".")).resolve()
+        secrets_dir = project_root / ".secrets"
+        for name in ["xiaohongshu.com_cookie.txt", "www.xiaohongshu.com_cookie.txt"]:
+            path = secrets_dir / name
+            if path.is_file():
+                return path.read_text(encoding="utf-8").strip()
+        return ""
+
+    @staticmethod
     def _comment_mode_flags() -> dict[str, object]:
         raw = os.getenv("ONEFETCH_XHS_COMMENT_MODE", "state+api").strip().lower()
         if raw == "off":
@@ -305,7 +316,7 @@ class XiaohongshuAdapter(BaseAdapter):
         if not note_id:
             return [], {"status": "skipped", "reason": "missing_note_id"}
 
-        cookie = os.getenv("ONEFETCH_XHS_COOKIE", "").strip()
+        cookie = self._load_cookie()
         if not cookie:
             return [], {"status": "skipped", "reason": "missing_cookie"}
         cooldown_remaining = self._risk_cooldown_remaining()
@@ -488,7 +499,7 @@ class XiaohongshuAdapter(BaseAdapter):
                 ),
             }
 
-        cookie_header = os.getenv("ONEFETCH_XHS_COOKIE", "").strip()
+        cookie_header = self._load_cookie()
         comment_records: list[FeedComment] = []
         tasks: list[asyncio.Task] = []
         seen: set[tuple[str | None, str]] = set()

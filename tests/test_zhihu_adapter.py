@@ -97,8 +97,11 @@ def test_detect_challenge_or_login_page() -> None:
     )
 
 
-def test_request_headers_include_cookie_when_configured(monkeypatch) -> None:
-    monkeypatch.setenv("ONEFETCH_ZHIHU_COOKIE", "z_c0=abc; d_c0=def")
+def test_request_headers_include_cookie_when_configured(monkeypatch, tmp_path) -> None:
+    secrets_dir = tmp_path / ".secrets"
+    secrets_dir.mkdir()
+    (secrets_dir / "zhihu.com_cookie.txt").write_text("z_c0=abc; d_c0=def")
+    monkeypatch.setenv("ONEFETCH_PROJECT_ROOT", str(tmp_path))
     headers = ZhihuAdapter._request_headers("https://zhuanlan.zhihu.com/p/123")
     assert headers.get("cookie") == "z_c0=abc; d_c0=def"
 

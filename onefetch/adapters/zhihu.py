@@ -6,6 +6,7 @@ import re
 import asyncio
 from datetime import datetime, timedelta, timezone
 from html import unescape
+from pathlib import Path
 from urllib.parse import urlparse
 
 from lxml import html
@@ -104,7 +105,7 @@ class ZhihuAdapter(BaseAdapter):
         if self._is_challenge_or_login_page(final_url, body_text) and self._looks_like_challenge_payload(title, content):
             raise RuntimeError(
                 "risk.blocked: zhihu challenge/login page intercepted; "
-                "正文不可用（可配置 ONEFETCH_ZHIHU_COOKIE 后重试）"
+                "正文不可用（可通过 setup_cookie.sh zhihu.com 配置 Cookie 后重试）"
             )
 
         if title and title.endswith(" - 知乎"):
@@ -183,10 +184,20 @@ class ZhihuAdapter(BaseAdapter):
             "accept-language": "zh-CN,zh;q=0.9,en;q=0.8",
             "referer": "https://zhuanlan.zhihu.com/",
         }
-        cookie = os.getenv("ONEFETCH_ZHIHU_COOKIE", "").strip()
+        cookie = ZhihuAdapter._load_cookie()
         if cookie:
             headers["cookie"] = cookie
         return headers
+
+    @staticmethod
+    def _load_cookie() -> str:
+        project_root = Path(os.getenv("ONEFETCH_PROJECT_ROOT", ".")).resolve()
+        secrets_dir = project_root / ".secrets"
+        for name in ["zhihu.com_cookie.txt", "zhuanlan.zhihu.com_cookie.txt"]:
+            path = secrets_dir / name
+            if path.is_file():
+                return path.read_text(encoding="utf-8").strip()
+        return ""
 
     @staticmethod
     def _parse_cookie_pairs(cookie_header: str) -> list[tuple[str, str]]:

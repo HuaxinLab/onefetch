@@ -124,7 +124,7 @@ agent 不需要手动选择适配器，router 根据 URL 自动路由。
     https://www.zhihu.com/question/{question_id}/answer/{answer_id}
     ```
     其中 `question_id` 从问答页面 URL 获取，`answer_id` 从正文中的 `answer_id: xxx` 获取。
-13. **B 站视频**：自动通过 API 获取视频信息和 AI 字幕。字幕需要 Cookie（`bash scripts/setup_cookie.sh www.bilibili.com`）。无 Cookie 时仍可获取视频标题、作者、简介，但无字幕。
+13. **B 站视频**：自动通过 API 获取视频信息和 AI 字幕。字幕需要 Cookie（`bash scripts/setup_cookie.sh bilibili.com`）。无 Cookie 时仍可获取视频标题、作者、简介，但无字幕。
 14. **B 站专栏**：无需 Cookie 可直接读取（自动 Playwright 渲染）。
 
 ### Cookie 配置说明
@@ -136,9 +136,9 @@ agent 不需要手动选择适配器，router 根据 URL 自动路由。
    - **F12 DevTools**：Network → 点击任意请求 → Headers → 复制 `Cookie:` 的值
    - **浏览器插件**：Cookie-Editor（导出选 Header String）、Get cookies.txt 等
 3. 复制 Cookie 后，直接运行脚本（会自动读取剪贴板）：
-   - 知乎专栏：`bash scripts/setup_cookie.sh zhihu`
-   - 小红书评论：`bash scripts/setup_cookie.sh xhs`
-   - B 站视频字幕：`bash scripts/setup_cookie.sh www.bilibili.com`
+   - 知乎专栏：`bash scripts/setup_cookie.sh zhihu.com`
+   - 小红书评论：`bash scripts/setup_cookie.sh xiaohongshu.com`
+   - B 站视频字幕：`bash scripts/setup_cookie.sh bilibili.com`
    - 任意其他网站：`bash scripts/setup_cookie.sh <域名>`（如 `bash scripts/setup_cookie.sh example.com`）
 
    配置后 cookie 保存在 `.secrets/<域名>_cookie.txt`，后续访问该域名时自动加载，无需额外参数。
@@ -308,12 +308,12 @@ bash scripts/run_cli.sh ingest --raw "URL"
 bash scripts/run_cli.sh ingest --list-crawlers
 
 # 小红书评论（可选，需先配置 Cookie）
-bash scripts/setup_cookie.sh xhs
+bash scripts/setup_cookie.sh xiaohongshu.com
 ONEFETCH_XHS_COMMENT_MODE='state+api' \
   bash scripts/run_cli.sh ingest "https://www.xiaohongshu.com/explore/..."
 
 # 知乎被风控时，配置 Cookie 后重试
-bash scripts/setup_cookie.sh zhihu
+bash scripts/setup_cookie.sh zhihu.com
 bash scripts/run_cli.sh ingest --present --refresh "https://zhuanlan.zhihu.com/p/..."
 
 # 安装浏览器渲染组件（SPA/JS 页面需要）
