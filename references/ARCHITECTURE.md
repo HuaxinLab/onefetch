@@ -77,8 +77,10 @@ OneFetch/
 ### 5.2 存储模式（--store）
 
 写入：
-- `data/feed/*.json`（结构化数据，含 LLM 输出）
-- `data/notes/*.md`（人可读归档，含摘要/要点/标签/正文）
+每篇文章一个目录：
+- `data/<timestamp>-<hash>/feed.json`（结构化数据，含 LLM 输出）
+- `data/<timestamp>-<hash>/note.md`（人可读归档，含摘要/要点/标签/正文）
+- `data/<timestamp>-<hash>/images/`（仅 `--with-images` 时，图片本地副本）
 - `data/catalog.jsonl`（索引，用于查重和检索）
 
 ### 5.3 去重策略

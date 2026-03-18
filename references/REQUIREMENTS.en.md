@@ -30,7 +30,7 @@ Core positioning:
 
 1. Default fetch-only mode (no writes to `data/`).
 2. Persist artifacts only with explicit `--store`.
-3. Predictable artifact layout (`data/feed|notes`).
+3. Per-article directory layout (`data/<timestamp>-<hash>/`) with `feed.json` + `note.md`, optional `images/`.
 
 ### 2.4 Xiaohongshu Comments
 

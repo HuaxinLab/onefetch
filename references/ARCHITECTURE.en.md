@@ -77,8 +77,10 @@ Principle:
 ### 5.2 Store mode (`--store`)
 
 Writes:
-- `data/feed/*.json` (structured data including LLM outputs)
-- `data/notes/*.md` (human-readable archive with summary/key points/tags/body)
+One directory per article:
+- `data/<timestamp>-<hash>/feed.json` (structured data including LLM outputs)
+- `data/<timestamp>-<hash>/note.md` (human-readable archive with summary/key points/tags/body)
+- `data/<timestamp>-<hash>/images/` (only with `--with-images`, local image copies)
 - `data/catalog.jsonl` (index for dedup and retrieval)
 
 ### 5.3 Dedup
