@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 
 from lxml import html
 
-from onefetch.adapters.base import BaseAdapter
+from onefetch.adapters.base import BaseAdapter, get_proxy_server
 from onefetch.http import create_async_client
 from onefetch.models import FeedComment, FeedEntry
 from onefetch.router import normalize_url
@@ -529,7 +529,11 @@ class XiaohongshuAdapter(BaseAdapter):
                 comment_records.append(FeedComment(author=author, text=text))
 
         async with async_playwright() as playwright:
-            browser = await playwright.chromium.launch(headless=True)
+            launch_args = {"headless": True}
+            proxy = get_proxy_server()
+            if proxy:
+                launch_args["proxy"] = {"server": proxy}
+            browser = await playwright.chromium.launch(**launch_args)
             context = await browser.new_context(
                 user_agent="Mozilla/5.0 (compatible; OneFetch/0.1)",
                 locale="zh-CN",

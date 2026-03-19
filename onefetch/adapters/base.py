@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from abc import ABC, abstractmethod
 from typing import ClassVar
@@ -7,6 +8,12 @@ from typing import ClassVar
 from lxml import html as lxml_html
 
 from onefetch.models import FeedEntry
+
+
+def get_proxy_server() -> str | None:
+    """读取代理配置，返回 Playwright 格式的 proxy server 地址。"""
+    proxy = os.getenv("HTTPS_PROXY") or os.getenv("HTTP_PROXY") or os.getenv("ALL_PROXY") or ""
+    return proxy.strip() or None
 
 
 _BLOCK_TAGS = frozenset({

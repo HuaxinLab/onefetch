@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 
 from lxml import html
 
-from onefetch.adapters.base import BaseAdapter, node_to_text
+from onefetch.adapters.base import BaseAdapter, get_proxy_server, node_to_text
 from onefetch.http import create_async_client
 from onefetch.models import FeedEntry
 from onefetch.router import normalize_url
@@ -243,15 +243,19 @@ class GenericHtmlAdapter(BaseAdapter):
 
         try:
             async with async_playwright() as p:
-                browser = await p.chromium.launch(
-                    headless=True,
-                    args=[
+                launch_args = {
+                    "headless": True,
+                    "args": [
                         "--disable-gpu",
                         "--disable-dev-shm-usage",
                         "--disable-blink-features=AutomationControlled",
                         "--window-size=1280,800",
                     ],
-                )
+                }
+                proxy = get_proxy_server()
+                if proxy:
+                    launch_args["proxy"] = {"server": proxy}
+                browser = await p.chromium.launch(**launch_args)
                 page = await browser.new_page(
                     user_agent=(
                         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "

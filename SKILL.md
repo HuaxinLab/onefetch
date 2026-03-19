@@ -154,8 +154,16 @@ agent 不需要手动选择适配器，router 根据 URL 自动路由。
       - `dep.playwright_missing` → 安装 Playwright（见 action_hint）
       - `auth.cookie_required` → 页面需要登录，按 `action_hint` 中的命令引导用户配置 Cookie
       - `risk.blocked` → 平台风控拦截，配置 Cookie 后重试
-      - `network.timeout` → 重试
+      - `network.timeout` → 重试，如果是外网地址可能需要代理（见下方代理配置）
       - `route.not_found` → URL 格式有误
+
+### 代理配置
+
+15. 访问外网页面超时或连接失败时，可能是网络原因，提示用户是否需要使用代理。用户提供代理地址后，通过环境变量传入即可：
+    ```bash
+    HTTPS_PROXY=<用户提供的代理地址> bash scripts/run_cli.sh ingest --present "URL"
+    ```
+    支持的环境变量：`HTTPS_PROXY`、`HTTP_PROXY`、`ALL_PROXY`，HTTP 请求和 Playwright 浏览器渲染都会自动使用。
 
 ### 主流程 vs 插件：如何选择
 
