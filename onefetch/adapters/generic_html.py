@@ -222,9 +222,24 @@ class GenericHtmlAdapter(BaseAdapter):
         GenericHtmlAdapter._normalize_links(normalized)
         GenericHtmlAdapter._normalize_tables(normalized)
         # Keep heading hierarchy for downstream LLM understanding.
-        for level in range(1, 7):
-            for heading in normalized.xpath(f".//h{level}"):
-                prefix = "#" * level + " "
+        heading_nodes = normalized.xpath(".//h1|.//h2|.//h3|.//h4|.//h5|.//h6")
+        min_level = 0
+        if heading_nodes:
+            levels: list[int] = []
+            for heading in heading_nodes:
+                tag = str(getattr(heading, "tag", "") or "").lower()
+                if tag.startswith("h") and tag[1:].isdigit():
+                    levels.append(int(tag[1:]))
+            if levels:
+                min_level = min(levels)
+        if min_level > 0:
+            for heading in heading_nodes:
+                tag = str(getattr(heading, "tag", "") or "").lower()
+                if not (tag.startswith("h") and tag[1:].isdigit()):
+                    continue
+                level = int(tag[1:])
+                mapped_level = max(3, min(level - min_level + 3, 6))
+                prefix = "#" * mapped_level + " "
                 existing = heading.text or ""
                 if not existing.startswith(prefix):
                     heading.text = prefix + existing

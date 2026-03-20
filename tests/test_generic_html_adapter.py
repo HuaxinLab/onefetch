@@ -28,7 +28,7 @@ def test_extract_main_text_keeps_heading_and_code_fences() -> None:
         """
     )
     text, _images = GenericHtmlAdapter._extract_main_text(tree)
-    assert "## Section Title" in text
+    assert "### Section Title" in text
     assert "```python" in text
     assert 'print("ok")' in text
     assert "```" in text

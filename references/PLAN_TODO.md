@@ -40,6 +40,26 @@
   - 增加 `--mode safe|normal`
   - 固化串行/分批/抖动间隔/温和重试
 
+### 4) 常用 adapter 的正文语义结构统一（按需推进）
+
+- 状态：`Draft`
+- 目标：将常用站点 adapter 的正文输出统一为“Markdown 友好结构”，提升 LLM 阅读质量与可复用性。
+- 最小语义集（优先实现）：
+  - 标题层级（动态归一化，正文最浅标题映射到 `###`）
+  - 列表结构（`ul/ol -> - / 1.`）
+  - 链接语义（`[text](url)`）
+- 进阶语义（按站点出现频率启用）：
+  - 表格（`table -> markdown table`）
+  - 代码块（`pre/code -> fenced block`）
+  - 图片占位 + 元数据（`[IMG:n]` 与 `images[{index,src,alt,href}]`）
+- 优先级建议：
+  - `wechat` / `zhihu`：`Pending` 候选（高频使用）
+  - `xiaohongshu`：`Pending` 候选（轻量语义保留）
+  - `bilibili`：`Draft`（字幕场景为主，优先级较低）
+- 验证要求（每个 adapter 落地时）：
+  - 单元测试覆盖结构转换
+  - 至少 1 条真实页面抽查（避免回归）
+
 ## 备注
 
 - 本文件只保留“未完成计划”。
