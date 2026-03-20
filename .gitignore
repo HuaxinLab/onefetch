@@ -10,6 +10,7 @@ reports/
 dist/
 release/
 .secrets/
+.onefetch/
 
 # macOS
 .DS_Store

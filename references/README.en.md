@@ -115,6 +115,14 @@ If extraction fails, the agent will return a concise reason and suggest next ste
 
 In most cases the agent handles issues automatically. If a dependency is missing or the environment is broken, the agent will provide the exact fix command — just follow the prompt.
 
+## Optional Extensions
+
+Some websites may have higher-quality dedicated parsers (adapter/expander) maintained in a separate extensions repository.  
+Regular users do not need to know command details — just tell the agent your goal, and the agent can check/install/update extensions when needed.
+
+Extensions repository:
+- https://github.com/HuaxinLab/onefetch-extensions
+
 ## Documentation
 
 - This page is the user guide for regular users.

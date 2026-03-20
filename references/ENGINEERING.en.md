@@ -18,6 +18,8 @@ Completed:
 - plugin framework (`onefetch plugin list/run`)
 - built-in + local preset loading for plugins
 - packing and cleanup scripts
+- external extension loader (`.onefetch/extensions/<id>`)
+- extension management commands (`ext list/install/update/remove`)
 
 ## 2. Development Workflow
 
@@ -101,3 +103,49 @@ Mid-term:
 1. add adapters as needed
 2. content quality scoring (readability/noise)
 3. finer risk/retry strategy
+
+## 7. External Extensions (adapter + expander)
+
+Goal: keep the core repository lightweight and install site-specific capabilities on demand.
+
+### 7.1 Bootstrap an extension repository (template)
+
+```bash
+bash scripts/init_extensions_repo.sh ~/Projects/onefetch-extensions
+```
+
+Generated files:
+- `index.json`
+- `sites/example/{manifest.json,adapter.py,expander.py}`
+- `README.md`
+
+### 7.2 Extension commands (run in core repo)
+
+```bash
+# List installed
+.venv/bin/python -m onefetch.cli ext list
+
+# List remote catalog
+.venv/bin/python -m onefetch.cli ext list --remote --repo <git_repo_url>
+
+# Install one or multiple
+.venv/bin/python -m onefetch.cli ext install geekbang --repo <git_repo_url>
+.venv/bin/python -m onefetch.cli ext install geekbang weread --repo <git_repo_url>
+
+# Install all
+.venv/bin/python -m onefetch.cli ext install --all --repo <git_repo_url>
+
+# Update
+.venv/bin/python -m onefetch.cli ext update geekbang --repo <git_repo_url>
+.venv/bin/python -m onefetch.cli ext update --all --repo <git_repo_url>
+
+# Remove
+.venv/bin/python -m onefetch.cli ext remove geekbang
+.venv/bin/python -m onefetch.cli ext remove --all
+```
+
+### 7.3 Manifest compatibility policy
+
+- Supported fields: `min_core_version` / `max_core_version`
+- If the core version is out of range, the extension is marked disabled and skipped.
+- Main ingest flow continues and falls back to built-in adapters (for example `generic_html`).

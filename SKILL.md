@@ -126,6 +126,39 @@ agent 不需要手动选择适配器，router 根据 URL 自动路由。
     其中 `question_id` 从问答页面 URL 获取，`answer_id` 从正文中的 `answer_id: xxx` 获取。
 13. **B 站视频**：自动通过 API 获取视频信息和 AI 字幕。字幕需要 Cookie（`bash scripts/setup_cookie.sh bilibili.com`）。无 Cookie 时仍可获取视频标题、作者、简介，但无字幕。
 14. **B 站专栏**：无需 Cookie 可直接读取（自动 Playwright 渲染）。
+15. **外置扩展站点**：优先使用对应扩展 adapter，减少目录/侧栏等页面噪音。
+
+### 外置扩展（仅 agent 内部流程）
+
+以下命令是给 agent 用的，普通用户不需要了解：
+
+扩展仓库地址（本环境）：
+- `https://github.com/HuaxinLab/onefetch-extensions`
+- 若设置了 `ONEFETCH_EXT_REPO`，优先使用环境变量值（可覆盖默认地址）
+
+1. 先查看扩展仓库里可安装的站点包：
+   ```bash
+   .venv/bin/python -m onefetch.cli ext list --remote --repo "${ONEFETCH_EXT_REPO:-https://github.com/HuaxinLab/onefetch-extensions}"
+   ```
+2. 首次需要某站点扩展时按 `id` 安装：
+   ```bash
+   .venv/bin/python -m onefetch.cli ext install <ext_id> --repo "${ONEFETCH_EXT_REPO:-https://github.com/HuaxinLab/onefetch-extensions}"
+   ```
+3. 若已安装但效果异常，先更新再重试：
+   ```bash
+   .venv/bin/python -m onefetch.cli ext update <ext_id> --repo "${ONEFETCH_EXT_REPO:-https://github.com/HuaxinLab/onefetch-extensions}"
+   ```
+4. 若扩展仓库不可用，agent 用通俗话提示用户：
+   - 「我可以先按通用模式读取这页内容；如果你希望更干净的站点专用结果，我可以在扩展仓库可用后再启用专用解析。」
+
+### 面向普通用户的提示模板（建议）
+
+- 当结构化结果可能不准时：
+  - 「正文内容已正常保存；本次摘要/要点/标签是自动整理结果，可能不够准确。你可以稍后让我基于这份正文重新整理。」
+- 当需要刷新网页最新内容时：
+  - 「我可以先刷新网页再整理，这样能拿到最新版本的正文。」
+- 当站点需要登录态时：
+  - 「这个页面需要登录后才能稳定读取。我可以引导你做一次 Cookie 配置，后续就能自动复用。」
 
 ### Cookie 配置说明
 

@@ -17,6 +17,8 @@
 - cookie 一次配置与自动加载
 - cookie 一次配置脚本（`setup_cookie.sh`）
 - 打包与清理脚本
+- 外置扩展加载器（`.onefetch/extensions/<id>`）
+- 扩展管理命令（`ext list/install/update/remove`）
 
 ## 2. 开发工作流
 
@@ -100,6 +102,52 @@ Plugin 运维命令：
 1. 新平台 adapter（按需求）
 2. 统一内容质量评分（可读性、噪音比）
 3. 更细粒度的风险与重试策略
+
+## 8. 外置扩展（adapter + expander）实践
+
+目标：核心仓保持轻量，把站点特化能力按需安装。
+
+### 8.1 一键初始化扩展仓库（模板）
+
+```bash
+bash scripts/init_extensions_repo.sh ~/Projects/onefetch-extensions
+```
+
+该命令会生成：
+- `index.json`
+- `sites/example/{manifest.json,adapter.py,expander.py}`
+- `README.md`
+
+### 8.2 扩展命令（核心仓内执行）
+
+```bash
+# 查看已安装
+.venv/bin/python -m onefetch.cli ext list
+
+# 查看远端可安装项
+.venv/bin/python -m onefetch.cli ext list --remote --repo <git_repo_url>
+
+# 安装一个或多个
+.venv/bin/python -m onefetch.cli ext install geekbang --repo <git_repo_url>
+.venv/bin/python -m onefetch.cli ext install geekbang weread --repo <git_repo_url>
+
+# 全量安装
+.venv/bin/python -m onefetch.cli ext install --all --repo <git_repo_url>
+
+# 更新
+.venv/bin/python -m onefetch.cli ext update geekbang --repo <git_repo_url>
+.venv/bin/python -m onefetch.cli ext update --all --repo <git_repo_url>
+
+# 卸载
+.venv/bin/python -m onefetch.cli ext remove geekbang
+.venv/bin/python -m onefetch.cli ext remove --all
+```
+
+### 8.3 manifest 兼容策略
+
+- 支持字段：`min_core_version` / `max_core_version`
+- 不满足版本范围时：扩展标记为 disabled 并跳过加载
+- 主流程不阻断，自动回退到内置能力（如 `generic_html`）
 
 ## 7. Cookie 一次配置（复制粘贴）
 

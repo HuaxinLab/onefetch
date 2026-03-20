@@ -115,6 +115,14 @@ ln -s /path/to/onefetch ~/.claude/skills/onefetch
 
 大多数情况下 agent 会自动处理。如果遇到依赖缺失或环境异常，agent 会给出具体的修复命令，按提示操作即可。
 
+## 可选扩展能力
+
+部分站点会有更高质量的专用解析（adapter/expander），由独立扩展仓库维护。  
+普通用户不需要关心命令细节，只需告诉 agent 你的目标；agent 会按需查看扩展仓库并完成安装/更新。
+
+扩展仓库：
+- https://github.com/HuaxinLab/onefetch-extensions
+
 ## 文档
 
 - 本页即普通用户使用说明。

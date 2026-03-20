@@ -15,6 +15,13 @@ from pathlib import Path
 from onefetch.adapters import create_default_adapters
 from onefetch.cache import TempCacheService
 from onefetch.config import OneFetchConfig
+from onefetch.extensions import (
+    install_extensions,
+    list_installed_extensions,
+    list_remote_extensions,
+    remove_extensions,
+    update_extensions,
+)
 from onefetch.llm_outputs import parse_and_validate_llm_outputs
 from onefetch.models import BatchIngestReport, IngestResult
 from onefetch.pipeline import IngestionPipeline
@@ -130,6 +137,35 @@ def build_parser() -> argparse.ArgumentParser:
         help="Plugin option as key=value; can be repeated",
     )
     plugin_doctor.add_argument("--json", action="store_true", help="Print JSON output")
+
+    ext = sub.add_parser("ext", help="Manage optional site extensions (adapter/expander bundles)")
+    ext_sub = ext.add_subparsers(dest="ext_command", required=True)
+
+    ext_list = ext_sub.add_parser("list", help="List installed extensions")
+    ext_list.add_argument("--json", action="store_true", help="Print JSON output")
+    ext_list.add_argument("--remote", action="store_true", help="List available extensions from remote index")
+    ext_list.add_argument("--repo", default=os.getenv("ONEFETCH_EXT_REPO", ""), help="Extension repository git URL")
+    ext_list.add_argument("--ref", default=os.getenv("ONEFETCH_EXT_REF", "main"), help="Git ref for extension repository")
+    ext_list.add_argument("--project-root", default=".", help="Project root (default: current directory)")
+
+    ext_install = ext_sub.add_parser("install", help="Install extension(s)")
+    ext_install.add_argument("ids", nargs="*", help="Extension IDs")
+    ext_install.add_argument("--all", action="store_true", help="Install all extensions from remote index")
+    ext_install.add_argument("--repo", default=os.getenv("ONEFETCH_EXT_REPO", ""), help="Extension repository git URL")
+    ext_install.add_argument("--ref", default=os.getenv("ONEFETCH_EXT_REF", "main"), help="Git ref for extension repository")
+    ext_install.add_argument("--project-root", default=".", help="Project root (default: current directory)")
+
+    ext_remove = ext_sub.add_parser("remove", help="Remove installed extension(s)")
+    ext_remove.add_argument("ids", nargs="*", help="Installed extension IDs")
+    ext_remove.add_argument("--all", action="store_true", help="Remove all installed extensions")
+    ext_remove.add_argument("--project-root", default=".", help="Project root (default: current directory)")
+
+    ext_update = ext_sub.add_parser("update", help="Update installed extension(s) from remote index")
+    ext_update.add_argument("ids", nargs="*", help="Extension IDs")
+    ext_update.add_argument("--all", action="store_true", help="Update all extensions from remote index")
+    ext_update.add_argument("--repo", default=os.getenv("ONEFETCH_EXT_REPO", ""), help="Extension repository git URL")
+    ext_update.add_argument("--ref", default=os.getenv("ONEFETCH_EXT_REF", "main"), help="Git ref for extension repository")
+    ext_update.add_argument("--project-root", default=".", help="Project root (default: current directory)")
     return parser
 
 
@@ -327,6 +363,14 @@ def _build_key_points(text: str, max_points: int = 3) -> list[str]:
     return [point[:180] for point in candidates[:max_points]]
 
 
+def _build_adapters(project_root: str) -> list:
+    try:
+        return create_default_adapters(project_root=project_root)
+    except TypeError:
+        # Backward-compatible for tests/mocks that monkeypatch no-arg callables.
+        return create_default_adapters()
+
+
 def _print_present(report, *, with_images: bool = False) -> None:
     for idx, result in enumerate(report.results, start=1):
         print(f"### Item {idx}")
@@ -414,7 +458,7 @@ async def _run_raw_fetch(
 
 
 async def run_ingest(args: argparse.Namespace) -> int:
-    adapters = create_default_adapters()
+    adapters = _build_adapters(args.project_root)
     router = Router(adapters)
 
     if args.list_crawlers:
@@ -660,6 +704,106 @@ def run_plugin(args: argparse.Namespace) -> int:
     return 2
 
 
+def _default_ext_repo(args: argparse.Namespace) -> str:
+    repo = (args.repo or "").strip()
+    if repo:
+        return repo
+    raise RuntimeError("Extension repo is required. Pass --repo or set ONEFETCH_EXT_REPO.")
+
+
+def run_ext(args: argparse.Namespace) -> int:
+    project_root = Path(args.project_root).expanduser()
+    cmd = args.ext_command
+    if cmd == "list":
+        if args.remote:
+            try:
+                rows = list_remote_extensions(_default_ext_repo(args), ref=args.ref)
+            except Exception as exc:
+                print(f"[ext] remote list failed: {exc}")
+                return 1
+            if args.json:
+                print(json.dumps(rows, ensure_ascii=False, indent=2))
+            else:
+                for row in rows:
+                    print(
+                        f"{row['id']}\t{row['version'] or '-'}\t{row['name'] or '-'}\t{row['description'] or '-'}"
+                    )
+            return 0
+
+        rows = list_installed_extensions(project_root)
+        payload = [
+            {
+                "id": row.id,
+                "name": row.name,
+                "version": row.version,
+                "path": str(row.path),
+                "provides": row.provides,
+                "domains": row.domains,
+                "enabled": row.enabled,
+                "reason": row.reason,
+            }
+            for row in rows
+        ]
+        if args.json:
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+        else:
+            if not payload:
+                print("[ext] no installed extensions")
+            for row in payload:
+                state = "enabled" if row["enabled"] else f"disabled({row['reason']})"
+                provides = ",".join(row["provides"]) if row["provides"] else "-"
+                print(f"{row['id']}\t{row['version'] or '-'}\t{provides}\t{state}\t{row['path']}")
+        return 0
+
+    if cmd == "install":
+        try:
+            installed = install_extensions(
+                project_root,
+                repo_url=_default_ext_repo(args),
+                ref=args.ref,
+                ids=args.ids,
+                install_all=args.all,
+            )
+        except Exception as exc:
+            print(f"[ext] install failed: {exc}")
+            return 1
+        for ext_id in installed:
+            print(f"[ext] installed: {ext_id}")
+        return 0
+
+    if cmd == "remove":
+        try:
+            removed = remove_extensions(project_root, ids=args.ids, remove_all=args.all)
+        except Exception as exc:
+            print(f"[ext] remove failed: {exc}")
+            return 1
+        if not removed:
+            print("[ext] nothing removed")
+            return 0
+        for ext_id in removed:
+            print(f"[ext] removed: {ext_id}")
+        return 0
+
+    if cmd == "update":
+        try:
+            updated = update_extensions(
+                project_root,
+                repo_url=_default_ext_repo(args),
+                ref=args.ref,
+                ids=args.ids,
+                update_all=args.all,
+            )
+        except Exception as exc:
+            print(f"[ext] update failed: {exc}")
+            return 1
+        for ext_id in updated:
+            print(f"[ext] updated: {ext_id}")
+        return 0
+
+    print(json.dumps({"error": f"Unsupported ext command: {cmd}"}))
+    return 2
+
+
 def run_cache_backfill(args: argparse.Namespace) -> int:
     """Backfill LLM outputs into an existing cache entry for a URL."""
     config = OneFetchConfig(project_root=Path(args.project_root).expanduser())
@@ -694,7 +838,7 @@ def run_cache_backfill(args: argparse.Namespace) -> int:
 
 async def run_images(args: argparse.Namespace) -> int:
     """Extract image URLs from one or more pages."""
-    adapters = create_default_adapters()
+    adapters = _build_adapters(args.project_root)
     router = Router(adapters)
     urls = extract_urls(args.inputs, args.text)
     if not urls:
@@ -767,6 +911,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_cache_backfill(args)
     if args.command == "plugin":
         return run_plugin(args)
+    if args.command == "ext":
+        return run_ext(args)
 
     print(json.dumps({"error": f"Unsupported command: {args.command}"}))
     return 2
