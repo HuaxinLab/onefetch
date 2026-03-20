@@ -12,6 +12,8 @@ from onefetch.config import Paths
 from onefetch.models import IngestResult
 
 _IMG_PLACEHOLDER_RE = re.compile(r"\[IMG:\d+\]\n?")
+_IMG_CAPTION_LINE_RE = re.compile(r"^\[IMG_CAPTION:(\d+)\]\s*(.*)$")
+_IMG_CAPTION_INLINE_RE = re.compile(r"\[IMG_CAPTION:(\d+)\]\s*")
 
 
 def _try_download_image(url: str) -> tuple[bytes | None, str]:
@@ -123,14 +125,8 @@ class StorageService:
                 lines.append(f"- {msg}")
             lines.append("")
 
-        # Body — replace [IMG:N] with local image paths or strip them
-        body = result.body_full or ""
-        if with_images and result.images:
-            for i in range(len(result.images)):
-                body = body.replace(f"[IMG:{i + 1}]", f"![{i + 1}](images/{i + 1:03d}.jpg)")
-            body = _IMG_PLACEHOLDER_RE.sub("", body)
-        else:
-            body = _IMG_PLACEHOLDER_RE.sub("", body)
+        # Body — normalize image/caption markers for readable note output
+        body = self._render_body_for_note(article_dir=article_dir, body=(result.body_full or ""), with_images=with_images)
         if body.strip():
             lines.extend(["## 正文", "", body.strip()])
 
@@ -144,6 +140,9 @@ class StorageService:
         images_dir.mkdir(exist_ok=True)
         failures: list[str] = []
         for i, url in enumerate(images):
+            # Keep idempotent behavior for "补下载图片" workflow.
+            if list(images_dir.glob(f"{i + 1:03d}.*")):
+                continue
             data, ct = _try_download_image(url)
             if data is None:
                 proxy_url = f"https://wsrv.nl/?url={urllib.parse.quote(url, safe='')}"
@@ -155,6 +154,48 @@ class StorageService:
             path = images_dir / f"{i + 1:03d}{ext}"
             path.write_bytes(data)
         return failures
+
+    @staticmethod
+    def _resolve_local_image_path(article_dir: Path, index: int) -> str:
+        images_dir = article_dir / "images"
+        candidates = sorted(images_dir.glob(f"{index:03d}.*"))
+        if candidates:
+            return f"images/{candidates[0].name}"
+        return f"images/{index:03d}.jpg"
+
+    def _render_body_for_note(self, *, article_dir: Path, body: str, with_images: bool) -> str:
+        lines = []
+        for raw in (body or "").splitlines():
+            line = raw.strip()
+            if not line:
+                lines.append("")
+                continue
+
+            if line.startswith("[IMG:") and line.endswith("]"):
+                if with_images:
+                    try:
+                        idx = int(line[5:-1])
+                    except Exception:
+                        continue
+                    img_rel = self._resolve_local_image_path(article_dir, idx)
+                    lines.append(f"![{idx}]({img_rel})")
+                continue
+
+            cap_match = _IMG_CAPTION_LINE_RE.match(line)
+            if cap_match:
+                caption = cap_match.group(2).strip()
+                if caption:
+                    lines.append(f"图片说明：{caption}")
+                continue
+
+            # Handle any inline caption token fallback.
+            line = _IMG_CAPTION_INLINE_RE.sub("", line).strip()
+            if line:
+                lines.append(line)
+
+        normalized = "\n".join(lines).strip()
+        normalized = re.sub(r"\n{3,}", "\n\n", normalized)
+        return normalized
 
     @staticmethod
     def _llm_source_label(result: IngestResult) -> str:

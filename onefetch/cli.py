@@ -1109,6 +1109,8 @@ async def run_discover(args: argparse.Namespace) -> int:
 
     if args.ingest:
         urls = _dedup_urls(all_discovered)
+        if args.ingest_store:
+            urls = _dedup_urls([*seed_urls, *urls])
         if not urls:
             print("[discover] no discovered URLs to ingest.")
             return 0

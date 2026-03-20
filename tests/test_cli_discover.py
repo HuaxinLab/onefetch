@@ -146,8 +146,9 @@ def test_discover_ingest_store_writes_collection_manifest(tmp_path, monkeypatch,
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert payload["seed_urls"] == ["https://example.com/seed"]
     assert "discovered_urls" in payload and len(payload["discovered_urls"]) == 2
-    assert "items" in payload and len(payload["items"]) == 2
+    assert "items" in payload and len(payload["items"]) == 3
     assert payload["collection_key"].startswith("seed-")
+    assert payload["items"][0]["source_url"] == "https://example.com/seed"
     for item in payload["items"]:
         assert item["feed_path"].startswith("items/")
 

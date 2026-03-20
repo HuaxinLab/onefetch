@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 from onefetch.config import OneFetchConfig
 from onefetch.models import IngestResult, LLMOutputs
@@ -95,3 +96,37 @@ def test_storage_with_images(tmp_path: Path) -> None:
     assert not (Path(article_dir) / "images").exists()
     note_content = (Path(article_dir) / "note.md").read_text(encoding="utf-8")
     assert "## 图片" not in note_content
+
+
+def test_storage_caption_markers_are_normalized(monkeypatch, tmp_path: Path) -> None:
+    config = OneFetchConfig.from_project_root(tmp_path)
+    storage = StorageService(config.paths())
+
+    # Mock image download to avoid network and force deterministic extension.
+    monkeypatch.setattr("onefetch.storage._try_download_image", lambda _url: (b"img", "image/png"))
+
+    result = IngestResult(
+        source_url="https://example.com/article",
+        canonical_url="https://example.com/article",
+        crawler_id="generic_html",
+        status="fetched",
+        content_hash="cap123",
+        title="Caption Test",
+        body_full="段落A\n[IMG:1]\n[IMG_CAPTION:1] 这是一段图片说明。\n段落B",
+        images=["https://example.com/1.png"],
+        llm_outputs_state="missing",
+    )
+
+    article_dir, _, _ = storage.store_result(result, with_images=True)
+    note_with_images = (Path(article_dir) / "note.md").read_text(encoding="utf-8")
+    assert "![1](images/001.png)" in note_with_images
+    assert "图片说明：这是一段图片说明。" in note_with_images
+    assert re.search(r"\[IMG(_CAPTION)?:\d+\]", note_with_images) is None
+
+    # Duplicate save without images should also not expose markers.
+    article_dir2, is_dup, _ = storage.store_result(result, with_images=False)
+    assert is_dup is True
+    assert article_dir2 == article_dir
+    note_without_images = (Path(article_dir2) / "note.md").read_text(encoding="utf-8")
+    assert "图片说明：这是一段图片说明。" in note_without_images
+    assert re.search(r"\[IMG(_CAPTION)?:\d+\]", note_without_images) is None
