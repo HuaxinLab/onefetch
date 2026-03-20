@@ -62,8 +62,8 @@ After installation, tell the agent:
 **Scenario 2b: Save article with images**
 > "Save this article including all images."
 
-**Scenario 3: Agent says summary/tags may be inaccurate**
-> "Use the saved full text and regenerate summary and tags." (No need to refetch.)
+**Scenario 3: Saved file has no summary/key points/tags yet**
+> "Use the saved full text and add summary and tags." (No need to refetch.)
 
 **Scenario 4: You want the latest page content**
 > "Refresh this URL first, then re-organize and save it: <URL>"

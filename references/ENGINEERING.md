@@ -13,7 +13,6 @@
 - 显式 `--store` 持久化
 - 临时缓存上限控制（`--cache-max-items`）
 - LLM 输出通过 `cache-backfill` 命令立刻回填到缓存
-- `--store` 且结构化结果失效时，优先通过 `ONEFETCH_LLM_REGEN_CMD` 执行真实 LLM 重算，失败再规则兜底
 - cookie 一次配置与自动加载
 - cookie 一次配置脚本（`setup_cookie.sh`）
 - 打包与清理脚本

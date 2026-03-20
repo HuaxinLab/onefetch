@@ -13,7 +13,6 @@ Completed:
 - explicit `--store` persistence
 - temp cache size control (`--cache-max-items`)
 - LLM output backfill via `cache-backfill` command (immediate write to cache)
-- in `--store` flow, invalid structured output is regenerated via real LLM through `ONEFETCH_LLM_REGEN_CMD` first, then heuristic fallback
 - one-time cookie setup and auto-load
 - plugin framework (`onefetch plugin list/run`)
 - built-in + local preset loading for plugins
