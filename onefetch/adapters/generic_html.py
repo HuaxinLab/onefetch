@@ -211,8 +211,150 @@ class GenericHtmlAdapter(BaseAdapter):
         candidates = cleaned.xpath("//article") or cleaned.xpath("//main") or cleaned.xpath("//body")
         if not candidates:
             return "", []
-        text, images = node_to_text(candidates[0], image_placeholders=True)
+        normalized = GenericHtmlAdapter._normalize_markdown_structure(candidates[0])
+        text, images = node_to_text(normalized, image_placeholders=True)
         return text[:20000], images
+
+    @staticmethod
+    def _normalize_markdown_structure(node: html.HtmlElement) -> html.HtmlElement:
+        normalized = html.fromstring(html.tostring(node, encoding="unicode"))
+        GenericHtmlAdapter._normalize_lists(normalized)
+        GenericHtmlAdapter._normalize_links(normalized)
+        GenericHtmlAdapter._normalize_tables(normalized)
+        # Keep heading hierarchy for downstream LLM understanding.
+        for level in range(1, 7):
+            for heading in normalized.xpath(f".//h{level}"):
+                prefix = "#" * level + " "
+                existing = heading.text or ""
+                if not existing.startswith(prefix):
+                    heading.text = prefix + existing
+
+        # Preserve block-code as fenced markdown.
+        for pre in normalized.xpath(".//pre"):
+            text = (pre.text_content() or "").replace("\u00a0", " ").replace("\u200b", "")
+            text = text.replace("\r\n", "\n").replace("\r", "\n").strip("\n")
+            if not text.strip():
+                continue
+            lang = GenericHtmlAdapter._detect_code_language(pre)
+            fence = f"```{lang}" if lang else "```"
+            pre.clear()
+            pre.text = f"\n{fence}\n{text}\n```"
+        return normalized
+
+    @staticmethod
+    def _detect_code_language(pre_node: html.HtmlElement) -> str:
+        candidates = [
+            str(pre_node.get("data-language") or ""),
+            str(pre_node.get("data-lang") or ""),
+            str(pre_node.get("language") or ""),
+            str(pre_node.get("class") or ""),
+        ]
+        for code in pre_node.xpath(".//code"):
+            candidates.extend(
+                [
+                    str(code.get("data-language") or ""),
+                    str(code.get("data-lang") or ""),
+                    str(code.get("language") or ""),
+                    str(code.get("class") or ""),
+                ]
+            )
+        for item in candidates:
+            low = item.lower()
+            match = re.search(r"language-([a-z0-9_+-]+)", low)
+            if match:
+                return match.group(1)
+            if low in {
+                "python",
+                "javascript",
+                "typescript",
+                "java",
+                "go",
+                "rust",
+                "c",
+                "cpp",
+                "bash",
+                "shell",
+                "json",
+                "yaml",
+                "sql",
+            }:
+                return low
+        return ""
+
+    @staticmethod
+    def _normalize_lists(node: html.HtmlElement) -> None:
+        for list_node in node.xpath(".//ul|.//ol"):
+            ordered = str(getattr(list_node, "tag", "")).lower() == "ol"
+            items = list_node.xpath("./li")
+            for idx, li in enumerate(items, start=1):
+                prefix = f"{idx}. " if ordered else "- "
+                text = li.text or ""
+                if not text.startswith(prefix):
+                    li.text = prefix + text
+
+    @staticmethod
+    def _normalize_links(node: html.HtmlElement) -> None:
+        for anchor in node.xpath(".//a[@href]"):
+            # Keep image wrappers for downstream image placeholder extraction.
+            if anchor.xpath(".//img"):
+                continue
+            href = (anchor.get("href") or "").strip()
+            if href.startswith("//"):
+                href = "https:" + href
+            text = " ".join((anchor.text_content() or "").split())
+            if href and text:
+                label = f"[{text}]({href})"
+            else:
+                label = text or href
+            replacement = html.Element("span")
+            replacement.text = label
+            parent = anchor.getparent()
+            if parent is not None:
+                parent.replace(anchor, replacement)
+
+    @staticmethod
+    def _normalize_tables(node: html.HtmlElement) -> None:
+        for table in node.xpath(".//table"):
+            block = GenericHtmlAdapter._table_to_markdown(table)
+            if not block:
+                continue
+            replacement = html.Element("div")
+            replacement.text = "\n" + block + "\n"
+            parent = table.getparent()
+            if parent is not None:
+                parent.replace(table, replacement)
+
+    @staticmethod
+    def _table_to_markdown(table_node: html.HtmlElement) -> str:
+        rows: list[list[str]] = []
+        header_by_th = False
+        for tr in table_node.xpath(".//tr"):
+            cells = tr.xpath("./th|./td")
+            if not cells:
+                continue
+            values: list[str] = []
+            if tr.xpath("./th"):
+                header_by_th = True
+            for cell in cells:
+                text = " ".join((cell.text_content() or "").split())
+                values.append(text.replace("|", r"\|"))
+            rows.append(values)
+        if not rows:
+            return ""
+
+        col_count = max(len(row) for row in rows)
+        normalized_rows = [row + [""] * (col_count - len(row)) for row in rows]
+        header = normalized_rows[0]
+        body = normalized_rows[1:]
+        if not header_by_th and not body:
+            return ""
+        lines = [
+            "| " + " | ".join(header) + " |",
+            "| " + " | ".join(["---"] * col_count) + " |",
+        ]
+        for row in body:
+            lines.append("| " + " | ".join(row) + " |")
+        return "\n".join(lines)
 
     @staticmethod
     def _needs_browser_fallback(content: str, body_text: str) -> bool:

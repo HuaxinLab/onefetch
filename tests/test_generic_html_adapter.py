@@ -1,4 +1,5 @@
 from onefetch.adapters.generic_html import GenericHtmlAdapter
+from lxml import html
 
 
 def test_browser_fallback_heuristics_short_content() -> None:
@@ -14,3 +15,58 @@ def test_browser_fallback_heuristics_normal_page() -> None:
     content = "A" * 500
     html_text = "<html><body>" + ("x" * 3000) + "</body></html>"
     assert GenericHtmlAdapter._needs_browser_fallback(content, html_text) is False
+
+
+def test_extract_main_text_keeps_heading_and_code_fences() -> None:
+    tree = html.fromstring(
+        """
+        <html><body><article>
+          <h2>Section Title</h2>
+          <p>before</p>
+          <pre><code class="language-python">print("ok")</code></pre>
+        </article></body></html>
+        """
+    )
+    text, _images = GenericHtmlAdapter._extract_main_text(tree)
+    assert "## Section Title" in text
+    assert "```python" in text
+    assert 'print("ok")' in text
+    assert "```" in text
+
+
+def test_extract_main_text_keeps_list_and_link_markdown() -> None:
+    tree = html.fromstring(
+        """
+        <html><body><article>
+          <ul><li>alpha</li><li>beta</li></ul>
+          <ol><li>step one</li><li>step two</li></ol>
+          <p>go to <a href="https://example.com/docs">docs</a></p>
+        </article></body></html>
+        """
+    )
+    text, _images = GenericHtmlAdapter._extract_main_text(tree)
+    assert "- alpha" in text
+    assert "- beta" in text
+    assert "1. step one" in text
+    assert "2. step two" in text
+    assert "[docs](https://example.com/docs)" in text
+
+
+def test_extract_main_text_keeps_table_and_image_placeholder() -> None:
+    tree = html.fromstring(
+        """
+        <html><body><article>
+          <table>
+            <tr><th>Name</th><th>Value</th></tr>
+            <tr><td>A</td><td>1</td></tr>
+          </table>
+          <p><img src="https://img.example.com/a.png" alt="a" /></p>
+        </article></body></html>
+        """
+    )
+    text, images = GenericHtmlAdapter._extract_main_text(tree)
+    assert "| Name | Value |" in text
+    assert "| --- | --- |" in text
+    assert "| A | 1 |" in text
+    assert "[IMG:1]" in text
+    assert images == ["https://img.example.com/a.png"]
