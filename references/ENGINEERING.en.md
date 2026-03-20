@@ -148,15 +148,29 @@ Generated files:
 
 # discover + one-command batch ingest
 .venv/bin/python -m onefetch.cli discover "<seed_url>" --ingest --ingest-from-cache
+
+# discover + save as one collection
+.venv/bin/python -m onefetch.cli discover "<seed_url>" --ingest --ingest-store --ingest-from-cache
 ```
 
-### 7.3 Manifest compatibility policy
+### 7.3 discover / collection artifact boundaries
+
+- `reports/discover/*.json`: discover-stage report (seed URLs, discovered URLs, warnings/errors)
+  - single seed: `reports/discover/seed-<seed_key>.json`
+  - multi seed: `reports/discover/batch-<batch_key>.json`
+- `data/collections/<key>/manifest.json`: saved-result index (user/agent facing)
+  - fields: `collection_key`, `generated_at`, `seed_urls`, `discovered_urls`, `items`
+  - each item: `order`, `source_url`, `canonical_url`, `title`, `feed_path` (relative path)
+  - same `<key>` is overwritten on re-run (latest-wins)
+- `data/collections/<key>/items/`: actual saved article directories in ordered names (`001-...`)
+
+### 7.4 Manifest compatibility policy
 
 - Supported fields: `min_core_version` / `max_core_version`
 - If the core version is out of range, the extension is marked disabled and skipped.
 - Main ingest flow continues and falls back to built-in adapters (for example `generic_html`).
 
-### 7.4 Extension smoke check (recommended)
+### 7.5 Extension smoke check (recommended)
 
 New script: `scripts/smoke_extensions.sh`
 

@@ -192,26 +192,32 @@ class StorageService:
         """
         collection_dir = self._paths.data_dir / "collections" / collection_key
         items_dir = collection_dir / "items"
-
-        # Overwrite same collection key by default (latest wins).
-        if collection_dir.exists():
-            shutil.rmtree(collection_dir)
-        items_dir.mkdir(parents=True, exist_ok=True)
+        next_items_dir = collection_dir / ".items.next"
+        collection_dir.mkdir(parents=True, exist_ok=True)
+        if next_items_dir.exists():
+            shutil.rmtree(next_items_dir)
+        next_items_dir.mkdir(parents=True, exist_ok=True)
 
         moved: dict[str, str] = {}
         for i, raw_path in enumerate(article_dirs_in_order, start=1):
             src = Path(raw_path).expanduser().resolve()
             if not src.is_dir():
                 continue
-            # only move data/<article> roots, skip already-collected paths
-            if src.parent != self._paths.data_dir:
-                continue
             dst_name = f"{i:03d}-{src.name}"
-            dst = (items_dir / dst_name).resolve()
+            dst = (next_items_dir / dst_name).resolve()
+            final_dst = (items_dir / dst_name).resolve()
             if dst.exists():
                 shutil.rmtree(dst)
-            shutil.move(str(src), str(dst))
-            moved[str(src)] = str(dst)
+            # Freshly stored data/<article> can be moved; existing collection items are copied then swapped.
+            if src.parent == self._paths.data_dir:
+                shutil.move(str(src), str(dst))
+            else:
+                shutil.copytree(src, dst)
+            moved[str(src)] = str(final_dst)
+
+        if items_dir.exists():
+            shutil.rmtree(items_dir)
+        next_items_dir.rename(items_dir)
 
         if moved:
             self._rewrite_catalog_article_dirs(moved)

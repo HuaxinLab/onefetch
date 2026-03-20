@@ -147,15 +147,29 @@ bash scripts/init_extensions_repo.sh ~/Projects/onefetch-extensions
 
 # discover 后一键批量 ingest
 .venv/bin/python -m onefetch.cli discover "<seed_url>" --ingest --ingest-from-cache
+
+# discover + 一键保存为合集
+.venv/bin/python -m onefetch.cli discover "<seed_url>" --ingest --ingest-store --ingest-from-cache
 ```
 
-### 8.3 manifest 兼容策略
+### 8.3 discover / collection 产物分工
+
+- `reports/discover/*.json`：发现阶段报告（入口页、发现出的 URL、告警/错误）
+  - 单 seed：`reports/discover/seed-<seed_key>.json`
+  - 多 seed：`reports/discover/batch-<batch_key>.json`
+- `data/collections/<key>/manifest.json`：保存结果索引（面向用户/agent）
+  - 包含：`collection_key`、`generated_at`、`seed_urls`、`discovered_urls`、`items`
+  - `items` 包含：`order`、`source_url`、`canonical_url`、`title`、`feed_path`（相对路径）
+  - 同 `<key>` 再次保存时覆盖更新（latest-wins）
+- `data/collections/<key>/items/`：实际保存内容目录（顺序重命名，如 `001-...`）
+
+### 8.4 manifest 兼容策略
 
 - 支持字段：`min_core_version` / `max_core_version`
 - 不满足版本范围时：扩展标记为 disabled 并跳过加载
 - 主流程不阻断，自动回退到内置能力（如 `generic_html`）
 
-### 8.4 扩展联调 smoke（推荐）
+### 8.5 扩展联调 smoke（推荐）
 
 新增脚本：`scripts/smoke_extensions.sh`
 

@@ -159,6 +159,18 @@ agent 不需要手动选择适配器，router 根据 URL 自动路由。
    # 然后一键批量 ingest
    .venv/bin/python -m onefetch.cli discover "<seed_url>" --ingest --ingest-from-cache
    ```
+   discover 默认会覆盖写入发现报告（不是每次新增一份）：
+   - 单 seed：`reports/discover/seed-<key>.json`
+   - 多 seed：`reports/discover/batch-<key>.json`
+
+6. 当用户要求“批量抓取并保存为合集”时，使用：
+   ```bash
+   .venv/bin/python -m onefetch.cli discover "<seed_url>" --ingest --ingest-store --ingest-from-cache
+   ```
+   结果会整理到 `data/collections/<key>/`：
+   - `manifest.json`：用户可读索引（`seed_urls`、`discovered_urls`、`items`）
+   - `items/`：按顺序重命名后的文章目录（`001-...`、`002-...`）
+   同一个 `<key>` 再次执行会覆盖更新为最新合集。
 
 ### 扩展联调 smoke（仅维护模式）
 

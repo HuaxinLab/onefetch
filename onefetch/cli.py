@@ -66,7 +66,8 @@ def _discover_seed_key(seed_url: str) -> str:
 
 
 def _discover_request_key(seed_urls: list[str]) -> str:
-    blob = "|".join(seed_urls)
+    normalized = sorted({(u or "").strip() for u in seed_urls if (u or "").strip()})
+    blob = "|".join(normalized)
     return hashlib.sha1(blob.encode("utf-8")).hexdigest()[:16]
 
 
@@ -938,17 +939,14 @@ def _build_discover_ingest_args(args: argparse.Namespace) -> argparse.Namespace:
 def _write_discover_default_reports(report: BatchDiscoverReport, paths) -> Path:
     discover_dir = paths.reports_dir / "discover"
     discover_dir.mkdir(parents=True, exist_ok=True)
-    out_path: Path
+    out_name: str
     if len(report.requested_urls) == 1:
-        by_seed_dir = discover_dir / "by_seed"
-        by_seed_dir.mkdir(parents=True, exist_ok=True)
         seed_key = _discover_seed_key(report.requested_urls[0])
-        out_path = by_seed_dir / f"{seed_key}.json"
+        out_name = f"seed-{seed_key}.json"
     else:
-        by_batch_dir = discover_dir / "by_batch"
-        by_batch_dir.mkdir(parents=True, exist_ok=True)
         req_key = _discover_request_key(report.requested_urls)
-        out_path = by_batch_dir / f"{req_key}.json"
+        out_name = f"batch-{req_key}.json"
+    out_path = discover_dir / out_name
     out_path.write_text(report.model_dump_json(indent=2), encoding="utf-8")
     return out_path
 
@@ -969,28 +967,33 @@ def _write_collection_manifest(
 ) -> Path:
     collection_dir = paths.data_dir / "collections" / collection_key
     collection_dir.mkdir(parents=True, exist_ok=True)
+
+    def _rel_feed_path(value: str) -> str:
+        raw = (value or "").strip()
+        if not raw:
+            return ""
+        try:
+            rel = Path(raw).resolve().relative_to(collection_dir.resolve())
+            return rel.as_posix()
+        except Exception:
+            return ""
+
     items: list[dict] = []
     for idx, result in enumerate(ingest_report.results, start=1):
         feed_path = str(result.feed_path or "").strip()
         moved_feed_path = moved_paths.get(feed_path, feed_path)
-        cache_path = str(result.cache_path or "").strip()
         items.append(
             {
                 "order": idx,
                 "source_url": result.source_url,
                 "canonical_url": result.canonical_url,
-                "status": result.status,
-                "crawler_id": result.crawler_id,
                 "title": result.title,
-                "feed_path": moved_feed_path,
-                "cache_path": cache_path,
-                "llm_outputs_state": result.llm_outputs_state,
+                "feed_path": _rel_feed_path(moved_feed_path),
             }
         )
 
     payload = {
         "collection_key": collection_key,
-        "run_id": discover_report.run_id,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "seed_urls": discover_report.requested_urls,
         "discovered_urls": [u for row in discover_report.results for u in row.discovered_urls],
@@ -1114,11 +1117,11 @@ async def run_discover(args: argparse.Namespace) -> int:
         ingest_report = getattr(ingest_args, "_last_ingest_report", None)
         if exit_code == 0 and args.ingest_store and ingest_report is not None:
             storage = StorageService(paths)
-            stored_dirs = [str(r.feed_path or "").strip() for r in ingest_report.results if r.status == "stored" and str(r.feed_path or "").strip()]
+            article_dirs = [str(r.feed_path or "").strip() for r in ingest_report.results if str(r.feed_path or "").strip()]
             collection_key = _collection_key_for_report(report)
             moved_paths = storage.relocate_articles_to_collection(
                 collection_key=collection_key,
-                article_dirs_in_order=stored_dirs,
+                article_dirs_in_order=article_dirs,
             )
             for row in ingest_report.results:
                 fp = str(row.feed_path or "").strip()

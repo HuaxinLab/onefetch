@@ -87,6 +87,11 @@ After installation, tell the agent:
 >
 > The agent will guide you to configure a Cookie for that site. Subsequent visits will automatically use the login session.
 
+**Scenario 10: Batch from a table-of-contents page**
+> "Use this course index page to fetch all chapters and save them as one collection: <seed_url>"
+>
+> The agent first discovers content URLs from the seed page, then runs batch ingest/save into one collection folder.
+
 ### Cookie Setup
 
 Some platforms and login-required sites need a one-time Cookie configuration (Bilibili video subtitles, Zhihu columns, Xiaohongshu comments, etc.):
