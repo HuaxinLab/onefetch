@@ -34,7 +34,7 @@ from onefetch.storage import StorageService
 
 URL_RE = re.compile(r"https?://[^\s<>()\[\]{}\"']+")
 SENTENCE_SPLIT_RE = re.compile(r"(?<=[。！？!?\.])\s+")
-IMG_PLACEHOLDER_RE = re.compile(r"\[IMG:\d+\]\n?")
+IMG_PLACEHOLDER_RE = re.compile(r"\[(?:IMG|IMG_CAPTION):\d+\]\s*")
 
 
 def strip_image_placeholders(text: str) -> str:
@@ -549,9 +549,6 @@ async def _run_ingest_urls(args: argparse.Namespace, urls: list[str]) -> int:
     report.results = [cached_results_by_url[url] for url in urls if url in cached_results_by_url]
     report.fetched_count, report.stored_count, report.duplicate_count, report.failed_count = _count_result_statuses(report)
     duration = time.monotonic() - start
-
-    if args.store:
-        await _ensure_store_ready_llm_outputs(report)
 
     # Update cache: touch if unchanged, save if modified
     if cache_service is not None:

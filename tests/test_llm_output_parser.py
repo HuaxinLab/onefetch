@@ -44,3 +44,16 @@ def test_parse_llm_outputs_fallback_on_invalid_json() -> None:
     assert "validation_error" in outputs.extras
     assert outputs.extras.get("raw_output") == raw
 
+
+def test_parse_llm_outputs_strips_image_markers() -> None:
+    raw = """
+{
+  "summary": "结论 [IMG:1] [IMG_CAPTION:2] 说明",
+  "key_points": ["要点A [IMG:1]", "[IMG_CAPTION:3] 要点B", "[IMG:2]"],
+  "tags": ["ai", "[IMG:1]", "reading [IMG_CAPTION:1]"]
+}
+""".strip()
+    outputs = parse_and_validate_llm_outputs(raw)
+    assert outputs.summary == "结论 说明"
+    assert outputs.key_points == ["要点A", "要点B"]
+    assert outputs.tags == ["ai", "reading"]

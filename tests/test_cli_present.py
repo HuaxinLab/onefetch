@@ -159,7 +159,7 @@ def test_ingest_refresh_bypasses_cache_even_with_from_cache(tmp_path, monkeypatc
     assert FakeAdapter.calls == 2
 
 
-def test_store_flow_regenerates_llm_outputs_from_full_body(tmp_path, capsys, monkeypatch) -> None:
+def test_store_flow_does_not_auto_regenerate_llm_outputs(tmp_path, capsys, monkeypatch) -> None:
     FakeAdapter.calls = 0
     monkeypatch.setattr(cli, "create_default_adapters", lambda: [FakeAdapter()])
 
@@ -171,7 +171,7 @@ def test_store_flow_regenerates_llm_outputs_from_full_body(tmp_path, capsys, mon
     assert FakeAdapter.calls == 1
     capsys.readouterr()
 
-    # Store from cache — should regenerate LLM from rules since state is missing
+    # Store from cache — should not auto-regenerate structured outputs
     second_exit = cli.main(
         ["ingest", "https://example.com", "--project-root", str(tmp_path),
          "--from-cache", "--store", "--present"]
@@ -179,14 +179,12 @@ def test_store_flow_regenerates_llm_outputs_from_full_body(tmp_path, capsys, mon
     out = capsys.readouterr().out
     assert second_exit == 0
     assert FakeAdapter.calls == 1
-    assert "- llm_outputs_state: ok" in out
-    assert "正文内容已正常保存" in out
+    assert "- llm_outputs_state: missing" in out
 
     cache_files = sorted((tmp_path / "reports" / "cache").glob("*.json"))
     assert cache_files
     payload = json.loads(cache_files[-1].read_text(encoding="utf-8"))
-    assert payload["llm_outputs_state"] == "ok"
-    assert payload["llm_outputs"]["extras"]["regenerated_from_full_body"] is True
+    assert payload["llm_outputs_state"] == "missing"
 
 
 def test_store_flow_prefers_llm_regeneration_when_command_available(tmp_path, capsys, monkeypatch) -> None:
@@ -207,6 +205,5 @@ def test_store_flow_prefers_llm_regeneration_when_command_available(tmp_path, ca
     out = capsys.readouterr().out
 
     assert exit_code == 0
-    assert "- llm_summary: regen summary" in out
-    assert "- llm_outputs_state: ok" in out
-    assert "- llm_tags: regen" in out
+    assert "- llm_summary: regen summary" not in out
+    assert "- llm_outputs_state: missing" in out

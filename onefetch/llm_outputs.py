@@ -7,6 +7,7 @@ from typing import Any
 from onefetch.models import LLMOutputs
 
 _JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", re.IGNORECASE)
+_IMG_MARKERS_RE = re.compile(r"\[(?:IMG|IMG_CAPTION):\d+\]\s*")
 
 _MAX_SUMMARY_CHARS = 4000
 _MAX_KEY_POINTS = 12
@@ -87,7 +88,7 @@ def _normalize_payload(payload: Any, *, raw_text: str, repaired: bool) -> LLMOut
 def _normalize_summary(value: Any) -> str:
     if value is None:
         return ""
-    summary = str(value).strip()
+    summary = _strip_image_markers(str(value))
     return summary[:_MAX_SUMMARY_CHARS]
 
 
@@ -104,6 +105,9 @@ def _normalize_list(value: Any, *, max_items: int) -> list[str]:
     seen: set[str] = set()
     normalized: list[str] = []
     for item in candidates:
+        item = _strip_image_markers(item)
+        if not item:
+            continue
         if item in seen:
             continue
         seen.add(item)
@@ -120,3 +124,8 @@ def _normalize_extras(value: Any) -> dict[str, Any]:
         return dict(value)
     return {"raw_extras": value}
 
+
+def _strip_image_markers(text: str) -> str:
+    cleaned = _IMG_MARKERS_RE.sub("", text or "")
+    cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
+    return cleaned

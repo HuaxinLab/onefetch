@@ -14,6 +14,8 @@ from onefetch.models import IngestResult
 _IMG_PLACEHOLDER_RE = re.compile(r"\[IMG:\d+\]\n?")
 _IMG_CAPTION_LINE_RE = re.compile(r"^\[IMG_CAPTION:(\d+)\]\s*(.*)$")
 _IMG_CAPTION_INLINE_RE = re.compile(r"\[IMG_CAPTION:(\d+)\]\s*")
+_IMG_MARKERS_INLINE_RE = re.compile(r"\[(?:IMG|IMG_CAPTION):\d+\]\s*")
+_ITEM_PREFIX_RE = re.compile(r"^(?:\d{3}-)+")
 
 
 def _try_download_image(url: str) -> tuple[bytes | None, str]:
@@ -48,7 +50,18 @@ class StorageService:
         """Store an IngestResult to data/. Returns (article_dir, is_duplicate, image_failures)."""
         duplicate = self.find_duplicate(result.canonical_url, result.content_hash)
         if duplicate:
-            return duplicate.get("article_dir", ""), True, []
+            article_dir = str(duplicate.get("article_dir", "") or "")
+            if with_images and article_dir:
+                article_path = Path(article_dir)
+                if article_path.is_dir():
+                    image_failures: list[str] = []
+                    if result.images:
+                        image_failures = self._download_images(article_path, result.images)
+                    # Refresh note/feed on demand so existing duplicates can be "补图 + 清理标记".
+                    self._save_feed(article_path, result)
+                    self._save_note(article_path, result, with_images=True, image_failures=image_failures)
+                    return article_dir, True, image_failures
+            return article_dir, True, []
 
         article_dir = self._create_article_dir(result)
         image_failures: list[str] = []
@@ -68,6 +81,7 @@ class StorageService:
         return article_dir
 
     def _save_feed(self, article_dir: Path, result: IngestResult) -> None:
+        llm_outputs = self._feed_llm_outputs(result)
         payload = {
             "source_url": result.source_url,
             "canonical_url": result.canonical_url,
@@ -80,8 +94,7 @@ class StorageService:
             "images": result.images,
             "comment_count": result.comment_count,
             "comment_source": result.comment_source,
-            "llm_outputs": result.llm_outputs.model_dump(),
-            "llm_outputs_state": result.llm_outputs_state,
+            "llm_outputs": llm_outputs,
             "stored_at": datetime.now(timezone.utc).isoformat(),
         }
         path = article_dir / "feed.json"
@@ -103,19 +116,26 @@ class StorageService:
             lines.append(f"- 评论: {result.comment_count} ({result.comment_source})")
         lines.append("")
 
-        # LLM outputs
-        llm = result.llm_outputs
-        source_label = self._llm_source_label(result)
+        # LLM outputs: only persist to note.md when they are model-derived.
+        if self._should_include_llm_sections(result):
+            llm = result.llm_outputs
+            source_label = self._llm_source_label(result)
 
-        if llm.summary:
-            lines.extend([f"## 摘要{source_label}", "", llm.summary, ""])
-        if llm.key_points:
-            lines.extend([f"## 要点{source_label}", ""])
-            for point in llm.key_points:
-                lines.append(f"- {point}")
-            lines.append("")
-        if llm.tags:
-            lines.extend(["## 标签", "", ", ".join(llm.tags), ""])
+            summary = self._clean_text_for_note(llm.summary)
+            key_points = [self._clean_text_for_note(point) for point in llm.key_points]
+            key_points = [point for point in key_points if point]
+            tags = [self._clean_text_for_note(tag) for tag in llm.tags]
+            tags = [tag for tag in tags if tag]
+
+            if summary:
+                lines.extend([f"## 摘要{source_label}", "", summary, ""])
+            if key_points:
+                lines.extend([f"## 要点{source_label}", ""])
+                for point in key_points:
+                    lines.append(f"- {point}")
+                lines.append("")
+            if tags:
+                lines.extend(["## 标签", "", ", ".join(tags), ""])
 
         # Image download failures
         if image_failures:
@@ -198,6 +218,15 @@ class StorageService:
         return normalized
 
     @staticmethod
+    def _clean_text_for_note(value: str) -> str:
+        text = (value or "").strip()
+        if not text:
+            return ""
+        text = _IMG_MARKERS_INLINE_RE.sub("", text)
+        text = re.sub(r"\s{2,}", " ", text).strip()
+        return text
+
+    @staticmethod
     def _llm_source_label(result: IngestResult) -> str:
         extras = result.llm_outputs.extras or {}
         regen_by = extras.get("regenerated_by", "")
@@ -208,6 +237,29 @@ class StorageService:
         if result.llm_outputs_state == "ok":
             return "（AI 整理）"
         return ""
+
+    @staticmethod
+    def _should_include_llm_sections(result: IngestResult) -> bool:
+        if result.llm_outputs_state != "ok":
+            return False
+        extras = result.llm_outputs.extras or {}
+        return str(extras.get("regenerated_by") or "") != "heuristic_rules"
+
+    def _feed_llm_outputs(self, result: IngestResult) -> dict:
+        if not self._should_include_llm_sections(result):
+            return {"summary": "", "key_points": [], "tags": [], "extras": {}}
+        llm = result.llm_outputs
+        summary = self._clean_text_for_note(llm.summary)
+        key_points = [self._clean_text_for_note(point) for point in llm.key_points]
+        key_points = [point for point in key_points if point]
+        tags = [self._clean_text_for_note(tag) for tag in llm.tags]
+        tags = [tag for tag in tags if tag]
+        return {
+            "summary": summary,
+            "key_points": key_points,
+            "tags": tags,
+            "extras": dict(llm.extras or {}),
+        }
 
     def _append_catalog(self, result: IngestResult, article_dir: str) -> None:
         record = {
@@ -244,7 +296,7 @@ class StorageService:
             src = Path(raw_path).expanduser().resolve()
             if not src.is_dir():
                 continue
-            dst_name = f"{i:03d}-{src.name}"
+            dst_name = f"{i:03d}-{self._strip_item_prefix(src.name)}"
             dst = (next_items_dir / dst_name).resolve()
             final_dst = (items_dir / dst_name).resolve()
             if dst.exists():
@@ -263,6 +315,10 @@ class StorageService:
         if moved:
             self._rewrite_catalog_article_dirs(moved)
         return moved
+
+    @staticmethod
+    def _strip_item_prefix(name: str) -> str:
+        return _ITEM_PREFIX_RE.sub("", name or "").strip() or (name or "")
 
     def _rewrite_catalog_article_dirs(self, moved: dict[str, str]) -> None:
         records: list[dict] = []
