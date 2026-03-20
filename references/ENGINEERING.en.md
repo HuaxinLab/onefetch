@@ -176,3 +176,8 @@ ONEFETCH_EXT_SMOKE_ID=<ext_id> \
 ONEFETCH_EXT_SMOKE_URL="<url>" \
 bash scripts/smoke_extensions.sh
 ```
+
+Minimal pre-release checks (recommended):
+1. `bash scripts/smoke_extensions.sh` succeeds
+2. `.venv/bin/python -m pytest -q` passes
+3. extension repo `index.json` and `README.md` are in sync

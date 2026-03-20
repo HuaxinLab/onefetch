@@ -176,6 +176,11 @@ ONEFETCH_EXT_SMOKE_URL="<url>" \
 bash scripts/smoke_extensions.sh
 ```
 
+发布前最小检查（建议）：
+1. `bash scripts/smoke_extensions.sh` 成功
+2. `.venv/bin/python -m pytest -q` 通过
+3. 扩展仓库 `index.json` 与 `README.md` 已同步
+
 ## 7. Cookie 一次配置（复制粘贴）
 
 ### 小红书评论 Cookie
