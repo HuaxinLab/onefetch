@@ -51,17 +51,22 @@ class StorageService:
         duplicate = self.find_duplicate(result.canonical_url, result.content_hash)
         if duplicate:
             article_dir = str(duplicate.get("article_dir", "") or "")
-            if with_images and article_dir:
-                article_path = Path(article_dir)
-                if article_path.is_dir():
-                    image_failures: list[str] = []
+            article_path = Path(article_dir) if article_dir else None
+            if article_path is None or not article_path.is_dir():
+                # Catalog can contain stale paths after historical collection swaps.
+                # If duplicate target no longer exists, treat it as a fresh store.
+                duplicate = None
+            else:
+                if with_images and article_dir:
                     if result.images:
                         image_failures = self._download_images(article_path, result.images)
+                    else:
+                        image_failures = []
                     # Refresh note/feed on demand so existing duplicates can be "补图 + 清理标记".
                     self._save_feed(article_path, result)
                     self._save_note(article_path, result, with_images=True, image_failures=image_failures)
                     return article_dir, True, image_failures
-            return article_dir, True, []
+                return article_dir, True, []
 
         article_dir = self._create_article_dir(result)
         image_failures: list[str] = []

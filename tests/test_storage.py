@@ -87,6 +87,32 @@ def test_storage_heuristic_outputs_not_written_to_note(tmp_path: Path) -> None:
     assert feed_payload["llm_outputs"] == {"summary": "", "key_points": [], "tags": [], "extras": {}}
 
 
+def test_storage_stale_duplicate_path_falls_back_to_new_store(tmp_path: Path) -> None:
+    config = OneFetchConfig.from_project_root(tmp_path)
+    storage = StorageService(config.paths())
+
+    result = IngestResult(
+        source_url="https://example.com/a",
+        canonical_url="https://example.com/a",
+        crawler_id="generic_html",
+        status="fetched",
+        content_hash="samehash",
+        title="A",
+        body_full="body",
+        llm_outputs_state="missing",
+    )
+
+    article_dir, is_dup, _ = storage.store_result(result)
+    assert is_dup is False
+    Path(article_dir).rename(Path(article_dir + "-moved"))
+
+    article_dir2, is_dup2, _ = storage.store_result(result)
+    assert is_dup2 is False
+    assert Path(article_dir2).is_dir()
+    assert (Path(article_dir2) / "feed.json").exists()
+    assert Path(article_dir + "-moved").is_dir()
+
+
 def test_storage_with_images(tmp_path: Path) -> None:
     config = OneFetchConfig.from_project_root(tmp_path)
     storage = StorageService(config.paths())
