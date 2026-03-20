@@ -149,3 +149,30 @@ Generated files:
 - Supported fields: `min_core_version` / `max_core_version`
 - If the core version is out of range, the extension is marked disabled and skipped.
 - Main ingest flow continues and falls back to built-in adapters (for example `generic_html`).
+
+### 7.4 Extension smoke check (recommended)
+
+New script: `scripts/smoke_extensions.sh`
+
+Purpose:
+- Run `ext list --remote`, `ext install`, and `ext update` in one flow
+- Then run a real `ingest --present --refresh` with the extension crawler
+
+Default values:
+- `ONEFETCH_EXT_REPO=https://github.com/HuaxinLab/onefetch-extensions`
+- `ONEFETCH_EXT_SMOKE_ID=geekbang`
+- `ONEFETCH_EXT_SMOKE_URL=https://b.geekbang.org/member/course/detail/942422`
+
+Run:
+
+```bash
+bash scripts/smoke_extensions.sh
+```
+
+Override example:
+
+```bash
+ONEFETCH_EXT_SMOKE_ID=<ext_id> \
+ONEFETCH_EXT_SMOKE_URL="<url>" \
+bash scripts/smoke_extensions.sh
+```

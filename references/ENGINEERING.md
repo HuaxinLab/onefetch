@@ -149,6 +149,33 @@ bash scripts/init_extensions_repo.sh ~/Projects/onefetch-extensions
 - 不满足版本范围时：扩展标记为 disabled 并跳过加载
 - 主流程不阻断，自动回退到内置能力（如 `generic_html`）
 
+### 8.4 扩展联调 smoke（推荐）
+
+新增脚本：`scripts/smoke_extensions.sh`
+
+用途：
+- 一次执行完成 `ext list --remote`、`ext install`、`ext update`
+- 最后用扩展 crawler 跑一个真实 URL 的 `ingest --present --refresh`
+
+默认参数：
+- `ONEFETCH_EXT_REPO=https://github.com/HuaxinLab/onefetch-extensions`
+- `ONEFETCH_EXT_SMOKE_ID=geekbang`
+- `ONEFETCH_EXT_SMOKE_URL=https://b.geekbang.org/member/course/detail/942422`
+
+执行：
+
+```bash
+bash scripts/smoke_extensions.sh
+```
+
+覆盖默认值示例：
+
+```bash
+ONEFETCH_EXT_SMOKE_ID=<ext_id> \
+ONEFETCH_EXT_SMOKE_URL="<url>" \
+bash scripts/smoke_extensions.sh
+```
+
 ## 7. Cookie 一次配置（复制粘贴）
 
 ### 小红书评论 Cookie
