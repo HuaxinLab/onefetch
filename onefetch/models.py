@@ -84,3 +84,21 @@ class BatchIngestReport(BaseModel):
     stored_count: int = 0
     duplicate_count: int = 0
     failed_count: int = 0
+
+
+class DiscoverResult(BaseModel):
+    seed_url: str
+    expander_id: str = ""
+    discovered_urls: list[str] = Field(default_factory=list)
+    stats: dict[str, Any] = Field(default_factory=dict)
+    warnings: list[str] = Field(default_factory=list)
+    next_cursor: str = ""
+    status: Literal["ok", "failed"] = "ok"
+    error: str = ""
+
+
+class BatchDiscoverReport(BaseModel):
+    requested_urls: list[str]
+    results: list[DiscoverResult] = Field(default_factory=list)
+    discovered_count: int = 0
+    failed_count: int = 0

@@ -17,13 +17,14 @@ from onefetch.cache import TempCacheService
 from onefetch.config import OneFetchConfig
 from onefetch.extensions import (
     install_extensions,
+    load_installed_expanders,
     list_installed_extensions,
     list_remote_extensions,
     remove_extensions,
     update_extensions,
 )
 from onefetch.llm_outputs import parse_and_validate_llm_outputs
-from onefetch.models import BatchIngestReport, IngestResult
+from onefetch.models import BatchDiscoverReport, BatchIngestReport, DiscoverResult, IngestResult
 from onefetch.pipeline import IngestionPipeline
 from onefetch.plugins import PluginTask, create_default_registry
 from onefetch.plugins.presets import list_presets, load_preset
@@ -166,6 +167,29 @@ def build_parser() -> argparse.ArgumentParser:
     ext_update.add_argument("--repo", default=os.getenv("ONEFETCH_EXT_REPO", ""), help="Extension repository git URL")
     ext_update.add_argument("--ref", default=os.getenv("ONEFETCH_EXT_REF", "main"), help="Git ref for extension repository")
     ext_update.add_argument("--project-root", default=".", help="Project root (default: current directory)")
+
+    discover = sub.add_parser("discover", help="Discover URLs from seed pages using installed expanders")
+    discover.add_argument("inputs", nargs="*", help="Seed URL(s) or free text containing URL(s)")
+    discover.add_argument("--text", default="", help="Optional free text to scan for URLs")
+    discover.add_argument("--project-root", default=".", help="Project root (default: current directory)")
+    discover.add_argument("--crawler", default="", help="Force adapter id for seed-page fetch")
+    discover.add_argument("--expander", default="", help="Force expander id")
+    discover.add_argument("--json", action="store_true", help="Print JSON report")
+    discover.add_argument("--present", action="store_true", help="Print discovered URL blocks")
+    discover.add_argument("--ingest", action="store_true", help="Run ingest on discovered URLs in this command")
+    discover.add_argument("--ingest-crawler", default="", help="Optional forced crawler id for follow-up ingest")
+    discover.add_argument("--ingest-store", action="store_true", help="Persist artifacts in follow-up ingest")
+    discover.add_argument("--ingest-present", action="store_true", help="Print normalized blocks in follow-up ingest")
+    discover.add_argument("--ingest-from-cache", action="store_true", help="Prefer cache in follow-up ingest")
+    discover.add_argument("--ingest-refresh", action="store_true", help="Force live crawl in follow-up ingest")
+    discover.add_argument("--ingest-with-images", action="store_true", help="Keep/download images in follow-up ingest")
+    discover.add_argument(
+        "--ingest-cache-temp",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Enable temp cache in follow-up ingest",
+    )
+    discover.add_argument("--ingest-cache-max-items", type=int, default=200, help="Temp cache max entries in follow-up ingest")
     return parser
 
 
@@ -458,18 +482,21 @@ async def _run_raw_fetch(
 
 
 async def run_ingest(args: argparse.Namespace) -> int:
-    adapters = _build_adapters(args.project_root)
-    router = Router(adapters)
-
-    if args.list_crawlers:
-        for adapter in router.list_adapters():
-            print(adapter)
-        return 0
-
     urls = extract_urls(args.inputs, args.text)
     if not urls:
         print("No URLs found. Pass URLs directly or via --text.")
         return 2
+    return await _run_ingest_urls(args, urls)
+
+
+async def _run_ingest_urls(args: argparse.Namespace, urls: list[str]) -> int:
+    adapters = _build_adapters(args.project_root)
+    router = Router(adapters)
+
+    if getattr(args, "list_crawlers", False):
+        for adapter in router.list_adapters():
+            print(adapter)
+        return 0
 
     config = OneFetchConfig.from_project_root(args.project_root)
     paths = config.paths()
@@ -836,6 +863,157 @@ def run_cache_backfill(args: argparse.Namespace) -> int:
     return 0
 
 
+def _dedup_urls(urls: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for url in urls:
+        if url not in seen:
+            seen.add(url)
+            out.append(url)
+    return out
+
+
+def _normalize_discovered_urls(value: object) -> tuple[list[str], dict, list[str], str]:
+    if isinstance(value, list):
+        urls = [str(x).strip() for x in value if str(x).strip()]
+        return _dedup_urls(urls), {"discovered_count": len(urls)}, [], ""
+    if isinstance(value, dict):
+        urls_raw = value.get("discovered_urls")
+        if urls_raw is None:
+            urls_raw = value.get("urls")
+        urls = [str(x).strip() for x in (urls_raw or []) if str(x).strip()]
+        stats = value.get("stats") if isinstance(value.get("stats"), dict) else {}
+        warnings = value.get("warnings") if isinstance(value.get("warnings"), list) else []
+        next_cursor = str(value.get("next_cursor") or "").strip()
+        return _dedup_urls(urls), stats, [str(x) for x in warnings if str(x).strip()], next_cursor
+    return [], {}, [f"unsupported_discover_output_type:{type(value).__name__}"], ""
+
+
+def _build_discover_ingest_args(args: argparse.Namespace) -> argparse.Namespace:
+    return argparse.Namespace(
+        command="ingest",
+        inputs=[],
+        text="",
+        crawler=args.ingest_crawler,
+        project_root=args.project_root,
+        json=False,
+        list_crawlers=False,
+        report_json="",
+        report_md="",
+        cache_temp=args.ingest_cache_temp,
+        cache_max_items=args.ingest_cache_max_items,
+        from_cache=args.ingest_from_cache,
+        refresh=args.ingest_refresh,
+        store=args.ingest_store,
+        present=args.ingest_present,
+        raw=False,
+        with_images=args.ingest_with_images,
+    )
+
+
+async def run_discover(args: argparse.Namespace) -> int:
+    seed_urls = extract_urls(args.inputs, args.text)
+    if not seed_urls:
+        print("No URLs found. Pass URLs directly or via --text.")
+        return 2
+
+    adapters = _build_adapters(args.project_root)
+    router = Router(adapters)
+    expanders = load_installed_expanders(args.project_root)
+    if args.expander:
+        expanders = [item for item in expanders if item.expander_id == args.expander]
+
+    report = BatchDiscoverReport(requested_urls=seed_urls)
+    all_discovered: list[str] = []
+    for seed_url in seed_urls:
+        matched = None
+        if args.expander:
+            for expander in expanders:
+                if expander.expander_id == args.expander:
+                    matched = expander
+                    break
+        else:
+            for expander in expanders:
+                try:
+                    if expander.supports(seed_url):
+                        matched = expander
+                        break
+                except Exception:
+                    continue
+        if matched is None:
+            report.results.append(
+                DiscoverResult(
+                    seed_url=seed_url,
+                    status="failed",
+                    error="no_matching_expander",
+                    warnings=["No installed expander supports this URL."],
+                )
+            )
+            continue
+
+        try:
+            matched_id = str(getattr(matched, "expander_id", "") or getattr(matched, "id", "")).strip() or "unknown"
+            adapter = router.route(seed_url, forced_adapter=args.crawler or None)
+            feed = await adapter.crawl(seed_url)
+            html_text = feed.raw_body or ""
+            discovered_raw = matched.discover(seed_url, html_text)
+            discovered_urls, stats, warnings, next_cursor = _normalize_discovered_urls(discovered_raw)
+            report.results.append(
+                DiscoverResult(
+                    seed_url=seed_url,
+                    expander_id=matched_id,
+                    discovered_urls=discovered_urls,
+                    stats={**stats, "seed_crawler": adapter.id, "raw_body_present": bool(html_text)},
+                    warnings=warnings,
+                    next_cursor=next_cursor,
+                    status="ok",
+                )
+            )
+            all_discovered.extend(discovered_urls)
+        except Exception as exc:
+            report.results.append(
+                DiscoverResult(
+                    seed_url=seed_url,
+                    expander_id=matched_id,
+                    status="failed",
+                    error=str(exc),
+                    warnings=["discover_execution_failed"],
+                )
+            )
+
+    report.discovered_count = sum(len(item.discovered_urls) for item in report.results)
+    report.failed_count = sum(1 for item in report.results if item.status == "failed")
+
+    if args.json:
+        print(report.model_dump_json(indent=2))
+    else:
+        print(
+            f"Processed {len(report.requested_urls)} seed URL(s): "
+            f"{report.discovered_count} discovered, {report.failed_count} failed."
+        )
+        for result in report.results:
+            print(f"[{result.status}] {result.seed_url}")
+            if result.expander_id:
+                print(f"  expander={result.expander_id}")
+            print(f"  discovered={len(result.discovered_urls)}")
+            if result.error:
+                print(f"  error={result.error}")
+            if result.warnings:
+                print(f"  warnings={', '.join(result.warnings)}")
+            if args.present and result.discovered_urls:
+                for url in result.discovered_urls:
+                    print(f"  - {url}")
+
+    if args.ingest:
+        urls = _dedup_urls(all_discovered)
+        if not urls:
+            print("[discover] no discovered URLs to ingest.")
+            return 0
+        ingest_args = _build_discover_ingest_args(args)
+        return await _run_ingest_urls(ingest_args, urls)
+    return 0
+
+
 async def run_images(args: argparse.Namespace) -> int:
     """Extract image URLs from one or more pages."""
     adapters = _build_adapters(args.project_root)
@@ -913,6 +1091,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_plugin(args)
     if args.command == "ext":
         return run_ext(args)
+    if args.command == "discover":
+        return asyncio.run(run_discover(args))
 
     print(json.dumps({"error": f"Unsupported command: {args.command}"}))
     return 2

@@ -151,6 +151,15 @@ agent 不需要手动选择适配器，router 根据 URL 自动路由。
 4. 若扩展仓库不可用，agent 用通俗话提示用户：
    - 「我可以先按通用模式读取这页内容；如果你希望更干净的站点专用结果，我可以在扩展仓库可用后再启用专用解析。」
 
+5. 当用户需求是“从目录页批量抓全部章节”时，优先用 `discover`：
+   ```bash
+   # 先看会发现哪些 URL
+   .venv/bin/python -m onefetch.cli discover "<seed_url>" --present
+
+   # 然后一键批量 ingest
+   .venv/bin/python -m onefetch.cli discover "<seed_url>" --ingest --ingest-from-cache
+   ```
+
 ### 扩展联调 smoke（仅维护模式）
 
 - `bash scripts/smoke_extensions.sh` 仅用于开发/发布前联调，不用于普通用户请求。

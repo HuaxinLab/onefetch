@@ -141,6 +141,12 @@ bash scripts/init_extensions_repo.sh ~/Projects/onefetch-extensions
 # 卸载
 .venv/bin/python -m onefetch.cli ext remove geekbang
 .venv/bin/python -m onefetch.cli ext remove --all
+
+# discover（入口页 -> 内容页 URL 列表）
+.venv/bin/python -m onefetch.cli discover "<seed_url>" --present
+
+# discover 后一键批量 ingest
+.venv/bin/python -m onefetch.cli discover "<seed_url>" --ingest --ingest-from-cache
 ```
 
 ### 8.3 manifest 兼容策略

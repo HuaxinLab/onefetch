@@ -142,6 +142,12 @@ Generated files:
 # Remove
 .venv/bin/python -m onefetch.cli ext remove geekbang
 .venv/bin/python -m onefetch.cli ext remove --all
+
+# discover (seed page -> content URL list)
+.venv/bin/python -m onefetch.cli discover "<seed_url>" --present
+
+# discover + one-command batch ingest
+.venv/bin/python -m onefetch.cli discover "<seed_url>" --ingest --ingest-from-cache
 ```
 
 ### 7.3 Manifest compatibility policy

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import inspect
 import json
 import shutil
 import subprocess
@@ -8,10 +9,12 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from onefetch import __version__ as CORE_VERSION
 
 _IMPORTED_ENTRY_FILES: set[Path] = set()
+_LOADED_MODULES: dict[Path, Any] = {}
 
 
 @dataclass(slots=True)
@@ -24,6 +27,14 @@ class InstalledExtension:
     domains: list[str]
     enabled: bool
     reason: str
+
+
+@dataclass(slots=True)
+class LoadedExpander:
+    extension_id: str
+    expander_id: str
+    supports: Any
+    discover: Any
 
 
 def extensions_root(project_root: str | Path) -> Path:
@@ -122,32 +133,42 @@ def list_installed_extensions(project_root: str | Path) -> list[InstalledExtensi
 
 
 def _import_entry(site_dir: Path, entry: str) -> tuple[bool, str]:
+    ok, symbol_obj, reason = _load_entry_symbol(site_dir, entry)
+    if not ok:
+        return False, reason
+    entry_file = symbol_obj["entry_file"]
+    _IMPORTED_ENTRY_FILES.add(entry_file)
+    return True, "ok"
+
+
+def _load_entry_symbol(site_dir: Path, entry: str) -> tuple[bool, dict[str, Any] | None, str]:
     if not entry or ":" not in entry:
-        return False, "invalid_entry"
+        return False, None, "invalid_entry"
     file_name, symbol = entry.split(":", 1)
     file_name = file_name.strip()
     symbol = symbol.strip()
     if not file_name or not symbol:
-        return False, "invalid_entry"
+        return False, None, "invalid_entry"
     entry_file = (site_dir / file_name).resolve()
     if not entry_file.is_file():
-        return False, "entry_file_missing"
-    if entry_file in _IMPORTED_ENTRY_FILES:
-        return True, "already_imported"
+        return False, None, "entry_file_missing"
 
-    module_name = f"onefetch_ext_{site_dir.name}_{entry_file.stem}"
-    spec = importlib.util.spec_from_file_location(module_name, entry_file)
-    if spec is None or spec.loader is None:
-        return False, "import_spec_failed"
-    module = importlib.util.module_from_spec(spec)
-    try:
-        spec.loader.exec_module(module)
-    except Exception as exc:
-        return False, f"import_error:{exc}"
+    module = _LOADED_MODULES.get(entry_file)
+    if module is None:
+        module_name = f"onefetch_ext_{site_dir.name}_{entry_file.stem}"
+        spec = importlib.util.spec_from_file_location(module_name, entry_file)
+        if spec is None or spec.loader is None:
+            return False, None, "import_spec_failed"
+        module = importlib.util.module_from_spec(spec)
+        try:
+            spec.loader.exec_module(module)
+        except Exception as exc:
+            return False, None, f"import_error:{exc}"
+        _LOADED_MODULES[entry_file] = module
+
     if not hasattr(module, symbol):
-        return False, "entry_symbol_missing"
-    _IMPORTED_ENTRY_FILES.add(entry_file)
-    return True, "ok"
+        return False, None, "entry_symbol_missing"
+    return True, {"entry_file": entry_file, "symbol_obj": getattr(module, symbol)}, "ok"
 
 
 def import_installed_adapters(project_root: str | Path) -> list[str]:
@@ -165,6 +186,86 @@ def import_installed_adapters(project_root: str | Path) -> list[str]:
         if ok:
             loaded.append(item.id)
     return loaded
+
+
+def load_installed_expanders(project_root: str | Path) -> list[LoadedExpander]:
+    rows: list[LoadedExpander] = []
+    for item in list_installed_extensions(project_root):
+        if not item.enabled:
+            continue
+        if "expander" not in item.provides:
+            continue
+        manifest = _load_manifest(item.path)
+        if manifest is None:
+            continue
+        entry = _entry_value(manifest, "expander")
+        ok, payload, _reason = _load_entry_symbol(item.path, entry)
+        if not ok or payload is None:
+            continue
+        symbol_obj = payload["symbol_obj"]
+
+        expander_obj = None
+        if inspect.isclass(symbol_obj):
+            try:
+                expander_obj = symbol_obj()
+            except Exception:
+                continue
+        elif hasattr(symbol_obj, "discover"):
+            expander_obj = symbol_obj
+        elif callable(symbol_obj):
+            expander_obj = _FunctionExpander(symbol_obj)
+        if expander_obj is None:
+            continue
+
+        supports_fn = getattr(expander_obj, "supports", None)
+        discover_fn = getattr(expander_obj, "discover", None)
+        if not callable(discover_fn):
+            continue
+        if isinstance(expander_obj, _FunctionExpander):
+            supports_fn = _build_domain_supports(item.domains)
+        elif not callable(supports_fn):
+            supports_fn = _build_domain_supports(item.domains)
+
+        expander_id = str(getattr(expander_obj, "id", "") or item.id).strip() or item.id
+        rows.append(
+            LoadedExpander(
+                extension_id=item.id,
+                expander_id=expander_id,
+                supports=supports_fn,
+                discover=discover_fn,
+            )
+        )
+    return rows
+
+
+class _FunctionExpander:
+    def __init__(self, fn: Any) -> None:
+        self._fn = fn
+        self.id = getattr(fn, "__name__", "expander")
+
+    def supports(self, _url: str) -> bool:
+        return False
+
+    def discover(self, seed_url: str, html_text: str):
+        try:
+            return self._fn(seed_url, html_text)
+        except TypeError:
+            return self._fn(seed_url)
+
+
+def _build_domain_supports(domains: list[str]):
+    normalized = [str(item or "").strip().lower().lstrip(".") for item in domains if str(item or "").strip()]
+
+    def _supports(url: str) -> bool:
+        host = (urlparse(url).hostname or "").lower()
+        if not host:
+            return False
+        for domain in normalized:
+            if host == domain or host.endswith(f".{domain}"):
+                return True
+        return False
+
+    return _supports
 
 
 def _read_repo_index(repo_dir: Path) -> dict[str, Any]:

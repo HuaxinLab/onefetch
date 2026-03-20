@@ -5,6 +5,7 @@ from pathlib import Path
 from onefetch.extensions import (
     import_installed_adapters,
     install_extensions,
+    load_installed_expanders,
     list_installed_extensions,
     list_remote_extensions,
     remove_extensions,
@@ -111,3 +112,32 @@ def test_extension_disabled_when_core_version_out_of_range(tmp_path) -> None:
 
     loaded = import_installed_adapters(tmp_path)
     assert loaded == []
+
+
+def test_load_installed_expanders_supports_function_entries(tmp_path) -> None:
+    ext_dir = tmp_path / ".onefetch" / "extensions" / "demo"
+    _write_json(
+        ext_dir / "manifest.json",
+        {
+            "id": "demo",
+            "name": "Demo Site",
+            "version": "0.1.0",
+            "domains": ["example.com"],
+            "provides": ["expander"],
+            "entry": {"expander": "expander.py:discover"},
+            "min_core_version": "0.2.0",
+        },
+    )
+    (ext_dir / "expander.py").write_text(
+        "def discover(seed_url):\n    return [seed_url + '/a', seed_url + '/a', seed_url + '/b']\n",
+        encoding="utf-8",
+    )
+    rows = load_installed_expanders(tmp_path)
+    assert len(rows) == 1
+    assert rows[0].expander_id == "discover"
+    assert rows[0].supports("https://example.com") is True
+    assert rows[0].discover("https://example.com", "<html></html>") == [
+        "https://example.com/a",
+        "https://example.com/a",
+        "https://example.com/b",
+    ]
