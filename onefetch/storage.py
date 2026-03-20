@@ -87,6 +87,7 @@ class StorageService:
 
     def _save_feed(self, article_dir: Path, result: IngestResult) -> None:
         llm_outputs = self._feed_llm_outputs(result)
+        images = self._normalize_images(result.images)
         payload = {
             "source_url": result.source_url,
             "canonical_url": result.canonical_url,
@@ -96,7 +97,7 @@ class StorageService:
             "published_at": result.published_at,
             "content_hash": result.content_hash,
             "body": result.body_full or "",
-            "images": result.images,
+            "images": images,
             "comment_count": result.comment_count,
             "comment_source": result.comment_source,
             "llm_outputs": llm_outputs,
@@ -158,27 +159,54 @@ class StorageService:
         path = article_dir / "note.md"
         path.write_text("\n".join(lines), encoding="utf-8")
 
-    @staticmethod
-    def _download_images(article_dir: Path, images: list[str]) -> list[str]:
+    def _download_images(self, article_dir: Path, images: list) -> list[str]:
         """Download images with wsrv.nl fallback. Returns failure messages."""
         images_dir = article_dir / "images"
         images_dir.mkdir(exist_ok=True)
         failures: list[str] = []
-        for i, url in enumerate(images):
+        for image in self._normalize_images(images):
+            i = int(image.get("index") or 0)
+            url = str(image.get("src") or "").strip()
+            if i <= 0 or not url:
+                continue
             # Keep idempotent behavior for "补下载图片" workflow.
-            if list(images_dir.glob(f"{i + 1:03d}.*")):
+            if list(images_dir.glob(f"{i:03d}.*")):
                 continue
             data, ct = _try_download_image(url)
             if data is None:
                 proxy_url = f"https://wsrv.nl/?url={urllib.parse.quote(url, safe='')}"
                 data, ct = _try_download_image(proxy_url)
             if data is None:
-                failures.append(f"[IMG:{i + 1}] download failed: {url}")
+                failures.append(f"[IMG:{i}] download failed: {url}")
                 continue
             ext = ".webp" if "webp" in ct else ".png" if "png" in ct else ".gif" if "gif" in ct else ".jpg"
-            path = images_dir / f"{i + 1:03d}{ext}"
+            path = images_dir / f"{i:03d}{ext}"
             path.write_bytes(data)
         return failures
+
+    @staticmethod
+    def _normalize_images(images: list) -> list[dict]:
+        rows: list[dict] = []
+        for i, raw in enumerate(images or [], start=1):
+            if isinstance(raw, dict):
+                src = str(raw.get("src") or "").strip()
+                alt = str(raw.get("alt") or "").strip()
+                href = str(raw.get("href") or "").strip()
+            else:
+                src = str(raw or "").strip()
+                alt = ""
+                href = ""
+            if not src:
+                continue
+            rows.append(
+                {
+                    "index": i,
+                    "src": src,
+                    "alt": alt,
+                    "href": href,
+                }
+            )
+        return rows
 
     @staticmethod
     def _resolve_local_image_path(article_dir: Path, index: int) -> str:

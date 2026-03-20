@@ -134,6 +134,11 @@ def test_storage_with_images(tmp_path: Path) -> None:
     assert not (Path(article_dir) / "images").exists()
     note_content = (Path(article_dir) / "note.md").read_text(encoding="utf-8")
     assert "## 图片" not in note_content
+    feed_payload = json.loads((Path(article_dir) / "feed.json").read_text(encoding="utf-8"))
+    assert feed_payload["images"] == [
+        {"index": 1, "src": "https://example.com/img1.jpg", "alt": "", "href": ""},
+        {"index": 2, "src": "https://example.com/img2.png", "alt": "", "href": ""},
+    ]
 
 
 def test_storage_caption_markers_are_normalized(monkeypatch, tmp_path: Path) -> None:

@@ -31,7 +31,7 @@ class FeedEntry(BaseModel):
     published_at: datetime | None = None
     body: str = ""
     raw_body: str = ""
-    images: list[str] = Field(default_factory=list)
+    images: list[Any] = Field(default_factory=list)
     comments: list[FeedComment] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
     content_hash: str = ""
@@ -70,7 +70,7 @@ class IngestResult(BaseModel):
     comment_source: str = "none"
     body_preview: str = ""
     body_full: str = ""
-    images: list[str] = Field(default_factory=list)
+    images: list[Any] = Field(default_factory=list)
     cache_path: str = ""
     llm_outputs: LLMOutputs = Field(default_factory=LLMOutputs)
     llm_outputs_state: Literal["missing", "ok", "fallback"] = "missing"

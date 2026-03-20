@@ -88,6 +88,38 @@ def test_geekbang_extract_rich_body_preserves_list_markdown_lines() -> None:
     assert "2. 步骤二" in body
 
 
+def test_geekbang_extract_rich_body_preserves_anchor_as_markdown_link() -> None:
+    module = _load_adapter_module()
+    tree = html.fromstring(
+        """
+        <div class="ProseMirror">
+          <p>参考资料：<a href="https://example.com/doc">官方文档</a></p>
+        </div>
+        """
+    )
+    body, _ = module.GeekbangAdapter._extract_rich_body(tree)
+    assert "[官方文档](https://example.com/doc)" in body
+
+
+def test_geekbang_extract_rich_body_collects_image_alt_and_href() -> None:
+    module = _load_adapter_module()
+    tree = html.fromstring(
+        """
+        <div class="ProseMirror">
+          <p>
+            <a href="https://example.com/full"><img src="https://img.example.com/a.jpg" alt="示意图" /></a>
+          </p>
+        </div>
+        """
+    )
+    body, images = module.GeekbangAdapter._extract_rich_body(tree)
+    assert "[IMG:1]" in body
+    assert len(images) == 1
+    assert images[0]["src"] == "https://img.example.com/a.jpg"
+    assert images[0]["alt"] == "示意图"
+    assert images[0]["href"] == "https://example.com/full"
+
+
 def test_geekbang_extract_rich_body_does_not_insert_double_blank_between_every_block() -> None:
     module = _load_adapter_module()
     tree = html.fromstring(
