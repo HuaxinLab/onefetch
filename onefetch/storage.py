@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
@@ -178,3 +179,63 @@ class StorageService:
         }
         with self._paths.catalog_file.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+    def relocate_articles_to_collection(
+        self,
+        *,
+        collection_key: str,
+        article_dirs_in_order: list[str],
+    ) -> dict[str, str]:
+        """Move stored article dirs under data/collections/<collection_key>/items in order.
+
+        Returns mapping {old_abs_path: new_abs_path} for successfully moved dirs.
+        """
+        collection_dir = self._paths.data_dir / "collections" / collection_key
+        items_dir = collection_dir / "items"
+
+        # Overwrite same collection key by default (latest wins).
+        if collection_dir.exists():
+            shutil.rmtree(collection_dir)
+        items_dir.mkdir(parents=True, exist_ok=True)
+
+        moved: dict[str, str] = {}
+        for i, raw_path in enumerate(article_dirs_in_order, start=1):
+            src = Path(raw_path).expanduser().resolve()
+            if not src.is_dir():
+                continue
+            # only move data/<article> roots, skip already-collected paths
+            if src.parent != self._paths.data_dir:
+                continue
+            dst_name = f"{i:03d}-{src.name}"
+            dst = (items_dir / dst_name).resolve()
+            if dst.exists():
+                shutil.rmtree(dst)
+            shutil.move(str(src), str(dst))
+            moved[str(src)] = str(dst)
+
+        if moved:
+            self._rewrite_catalog_article_dirs(moved)
+        return moved
+
+    def _rewrite_catalog_article_dirs(self, moved: dict[str, str]) -> None:
+        records: list[dict] = []
+        changed = False
+        with self._paths.catalog_file.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                raw = line.strip()
+                if not raw:
+                    continue
+                try:
+                    rec = json.loads(raw)
+                except Exception:
+                    continue
+                old_dir = str(rec.get("article_dir") or "")
+                if old_dir in moved:
+                    rec["article_dir"] = moved[old_dir]
+                    changed = True
+                records.append(rec)
+        if not changed:
+            return
+        with self._paths.catalog_file.open("w", encoding="utf-8") as handle:
+            for rec in records:
+                handle.write(json.dumps(rec, ensure_ascii=False) + "\n")

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import os
 import re
@@ -51,6 +52,22 @@ def extract_urls(chunks: list[str], text: str = "") -> list[str]:
                 seen.add(cleaned)
                 urls.append(cleaned)
     return urls
+
+
+def _discover_run_id(seed_urls: list[str]) -> str:
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    seed_blob = "|".join(seed_urls)
+    digest = hashlib.sha1(seed_blob.encode("utf-8")).hexdigest()[:8]
+    return f"{stamp}-{digest}"
+
+
+def _discover_seed_key(seed_url: str) -> str:
+    return hashlib.sha1((seed_url or "").encode("utf-8")).hexdigest()[:16]
+
+
+def _discover_request_key(seed_urls: list[str]) -> str:
+    blob = "|".join(seed_urls)
+    return hashlib.sha1(blob.encode("utf-8")).hexdigest()[:16]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -543,6 +560,9 @@ async def _run_ingest_urls(args: argparse.Namespace, urls: list[str]) -> int:
             original_state = cache_hit_states.get(result.source_url)
             if original_state == "ok" and result.llm_outputs_state == "ok":
                 cache_service.touch_result(result.canonical_url, result.content_hash)
+                latest = cache_service.find_latest_path(result.source_url)
+                if latest is not None:
+                    result.cache_path = str(latest)
             else:
                 result.cache_path = cache_service.save_result(result)
 
@@ -563,6 +583,8 @@ async def _run_ingest_urls(args: argparse.Namespace, urls: list[str]) -> int:
     _write_report_files(summary, json_path=args.report_json, md_path=args.report_md)
 
     if args.json:
+        setattr(args, "_last_ingest_report", report)
+        setattr(args, "_last_paths", paths)
         print(report.model_dump_json(indent=2))
         return 0
 
@@ -600,6 +622,8 @@ async def _run_ingest_urls(args: argparse.Namespace, urls: list[str]) -> int:
         print(f"  report_json={Path(args.report_json).expanduser()}")
     if args.report_md:
         print(f"  report_md={Path(args.report_md).expanduser()}")
+    setattr(args, "_last_ingest_report", report)
+    setattr(args, "_last_paths", paths)
     return 0
 
 
@@ -911,11 +935,81 @@ def _build_discover_ingest_args(args: argparse.Namespace) -> argparse.Namespace:
     )
 
 
+def _write_discover_default_reports(report: BatchDiscoverReport, paths) -> Path:
+    discover_dir = paths.reports_dir / "discover"
+    discover_dir.mkdir(parents=True, exist_ok=True)
+    out_path: Path
+    if len(report.requested_urls) == 1:
+        by_seed_dir = discover_dir / "by_seed"
+        by_seed_dir.mkdir(parents=True, exist_ok=True)
+        seed_key = _discover_seed_key(report.requested_urls[0])
+        out_path = by_seed_dir / f"{seed_key}.json"
+    else:
+        by_batch_dir = discover_dir / "by_batch"
+        by_batch_dir.mkdir(parents=True, exist_ok=True)
+        req_key = _discover_request_key(report.requested_urls)
+        out_path = by_batch_dir / f"{req_key}.json"
+    out_path.write_text(report.model_dump_json(indent=2), encoding="utf-8")
+    return out_path
+
+
+def _collection_key_for_report(report: BatchDiscoverReport) -> str:
+    if len(report.requested_urls) == 1:
+        return f"seed-{_discover_seed_key(report.requested_urls[0])}"
+    return f"batch-{_discover_request_key(report.requested_urls)}"
+
+
+def _write_collection_manifest(
+    *,
+    collection_key: str,
+    paths,
+    discover_report: BatchDiscoverReport,
+    ingest_report: BatchIngestReport,
+    moved_paths: dict[str, str],
+) -> Path:
+    collection_dir = paths.data_dir / "collections" / collection_key
+    collection_dir.mkdir(parents=True, exist_ok=True)
+    items: list[dict] = []
+    for idx, result in enumerate(ingest_report.results, start=1):
+        feed_path = str(result.feed_path or "").strip()
+        moved_feed_path = moved_paths.get(feed_path, feed_path)
+        cache_path = str(result.cache_path or "").strip()
+        items.append(
+            {
+                "order": idx,
+                "source_url": result.source_url,
+                "canonical_url": result.canonical_url,
+                "status": result.status,
+                "crawler_id": result.crawler_id,
+                "title": result.title,
+                "feed_path": moved_feed_path,
+                "cache_path": cache_path,
+                "llm_outputs_state": result.llm_outputs_state,
+            }
+        )
+
+    payload = {
+        "collection_key": collection_key,
+        "run_id": discover_report.run_id,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "seed_urls": discover_report.requested_urls,
+        "discovered_urls": [u for row in discover_report.results for u in row.discovered_urls],
+        "items": items,
+    }
+    manifest_path = collection_dir / "manifest.json"
+    manifest_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return manifest_path
+
+
 async def run_discover(args: argparse.Namespace) -> int:
     seed_urls = extract_urls(args.inputs, args.text)
     if not seed_urls:
         print("No URLs found. Pass URLs directly or via --text.")
         return 2
+
+    config = OneFetchConfig.from_project_root(args.project_root)
+    paths = config.paths()
+    run_id = _discover_run_id(seed_urls)
 
     adapters = _build_adapters(args.project_root)
     router = Router(adapters)
@@ -923,7 +1017,11 @@ async def run_discover(args: argparse.Namespace) -> int:
     if args.expander:
         expanders = [item for item in expanders if item.expander_id == args.expander]
 
-    report = BatchDiscoverReport(requested_urls=seed_urls)
+    report = BatchDiscoverReport(
+        run_id=run_id,
+        generated_at=datetime.now(timezone.utc).isoformat(),
+        requested_urls=seed_urls,
+    )
     all_discovered: list[str] = []
     for seed_url in seed_urls:
         matched = None
@@ -983,6 +1081,7 @@ async def run_discover(args: argparse.Namespace) -> int:
 
     report.discovered_count = sum(len(item.discovered_urls) for item in report.results)
     report.failed_count = sum(1 for item in report.results if item.status == "failed")
+    report_path = _write_discover_default_reports(report, paths)
 
     if args.json:
         print(report.model_dump_json(indent=2))
@@ -1003,6 +1102,7 @@ async def run_discover(args: argparse.Namespace) -> int:
             if args.present and result.discovered_urls:
                 for url in result.discovered_urls:
                     print(f"  - {url}")
+        print(f"  discover_report={report_path}")
 
     if args.ingest:
         urls = _dedup_urls(all_discovered)
@@ -1010,7 +1110,29 @@ async def run_discover(args: argparse.Namespace) -> int:
             print("[discover] no discovered URLs to ingest.")
             return 0
         ingest_args = _build_discover_ingest_args(args)
-        return await _run_ingest_urls(ingest_args, urls)
+        exit_code = await _run_ingest_urls(ingest_args, urls)
+        ingest_report = getattr(ingest_args, "_last_ingest_report", None)
+        if exit_code == 0 and args.ingest_store and ingest_report is not None:
+            storage = StorageService(paths)
+            stored_dirs = [str(r.feed_path or "").strip() for r in ingest_report.results if r.status == "stored" and str(r.feed_path or "").strip()]
+            collection_key = _collection_key_for_report(report)
+            moved_paths = storage.relocate_articles_to_collection(
+                collection_key=collection_key,
+                article_dirs_in_order=stored_dirs,
+            )
+            for row in ingest_report.results:
+                fp = str(row.feed_path or "").strip()
+                if fp in moved_paths:
+                    row.feed_path = moved_paths[fp]
+            manifest_path = _write_collection_manifest(
+                collection_key=collection_key,
+                paths=paths,
+                discover_report=report,
+                ingest_report=ingest_report,
+                moved_paths=moved_paths,
+            )
+            print(f"[discover] collection_manifest={manifest_path}")
+        return exit_code
     return 0
 
 

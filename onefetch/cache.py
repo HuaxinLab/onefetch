@@ -48,9 +48,19 @@ class TempCacheService:
         return str(path)
 
     def load_latest_result(self, url: str) -> IngestResult | None:
+        latest_path = self.find_latest_path(url)
+        if latest_path is None:
+            return None
+        try:
+            latest_payload = json.loads(latest_path.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+        return self._to_result(latest_payload)
+
+    def find_latest_path(self, url: str) -> Path | None:
         target = _normalize_url(url)
-        latest_payload: dict | None = None
         latest_time = ""
+        latest_path: Path | None = None
 
         for path in self._cache_dir.glob("*.json"):
             try:
@@ -68,11 +78,8 @@ class TempCacheService:
             cached_at = str(payload.get("cached_at") or "")
             if cached_at >= latest_time:
                 latest_time = cached_at
-                latest_payload = payload
-
-        if latest_payload is None:
-            return None
-        return self._to_result(latest_payload)
+                latest_path = path
+        return latest_path
 
     @staticmethod
     def _to_result(payload: dict) -> IngestResult:

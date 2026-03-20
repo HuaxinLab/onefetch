@@ -98,6 +98,8 @@ class DiscoverResult(BaseModel):
 
 
 class BatchDiscoverReport(BaseModel):
+    run_id: str = ""
+    generated_at: str = ""
     requested_urls: list[str]
     results: list[DiscoverResult] = Field(default_factory=list)
     discovered_count: int = 0
