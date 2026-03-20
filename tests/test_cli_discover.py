@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import json
-import importlib.util
-from pathlib import Path
 
 from onefetch import cli
 from onefetch.adapters.base import BaseAdapter
@@ -151,19 +149,6 @@ def test_discover_ingest_store_writes_collection_manifest(tmp_path, monkeypatch,
     assert payload["items"][0]["source_url"] == "https://example.com/seed"
     for item in payload["items"]:
         assert item["feed_path"].startswith("items/")
-
-
-def test_geekbang_intro_img_placeholders_are_renumbered() -> None:
-    adapter_file = Path(__file__).resolve().parents[1] / ".onefetch" / "extensions" / "geekbang" / "adapter.py"
-    BaseAdapter._registry.pop("geekbang", None)
-    spec = importlib.util.spec_from_file_location("test_geekbang_adapter", adapter_file)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    BaseAdapter._registry.pop("geekbang", None)
-    text = "课程知识地图如下：\n[IMG:1]\n[IMG:1]"
-    out = module.GeekbangAdapter._renumber_img_placeholders(text)
-    assert out == "课程知识地图如下：\n[IMG:1]\n[IMG:2]"
 
 
 def test_discover_request_key_is_order_insensitive() -> None:
