@@ -52,7 +52,7 @@ class GenericHtmlAdapter(BaseAdapter):
         published_at = None
         content = ""
         if body_text:
-            tree = html.fromstring(body_text)
+            tree = self._parse_html_tree(body_text)
             title = self._first_text(tree, ["//meta[@property='og:title']/@content", "//title/text()"])
             author = self._first_text(tree, ["//meta[@name='author']/@content", "//meta[@property='article:author']/@content"])
             published_raw = self._first_text(
@@ -76,7 +76,7 @@ class GenericHtmlAdapter(BaseAdapter):
                 body_text = rendered_html
                 final_url = rendered_url or final_url
                 status_code = 200 if status_code <= 0 else status_code
-                tree = html.fromstring(body_text)
+                tree = self._parse_html_tree(body_text)
                 title = self._first_text(tree, ["//meta[@property='og:title']/@content", "//title/text()"])
                 author = self._first_text(tree, ["//meta[@name='author']/@content", "//meta[@property='article:author']/@content"])
                 published_raw = self._first_text(
@@ -127,6 +127,16 @@ class GenericHtmlAdapter(BaseAdapter):
                 "browser": browser_status,
             },
         )
+
+    @staticmethod
+    def _sanitize_html_text(text: str) -> str:
+        # lxml rejects NULL bytes and most C0 controls in XML-compatible mode.
+        # Keep TAB/LF/CR and strip the rest to avoid parser crashes on malformed pages.
+        return re.sub(r"[\x00-\x08\x0B\x0C\x0E-\x1F]", "", text or "")
+
+    @classmethod
+    def _parse_html_tree(cls, text: str) -> html.HtmlElement:
+        return html.fromstring(cls._sanitize_html_text(text))
 
     @staticmethod
     def _load_cookie(url: str) -> str:
@@ -193,7 +203,7 @@ class GenericHtmlAdapter(BaseAdapter):
 
     @staticmethod
     def _extract_main_text(tree: html.HtmlElement) -> str:
-        cleaned = html.fromstring(html.tostring(tree, encoding="unicode"))
+        cleaned = GenericHtmlAdapter._parse_html_tree(html.tostring(tree, encoding="unicode"))
         remove_xpaths = [
             "//nav",
             "//header",
