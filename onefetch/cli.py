@@ -25,7 +25,7 @@ from onefetch.extensions import (
     update_extensions,
 )
 from onefetch.llm_outputs import parse_and_validate_llm_outputs
-from onefetch.models import BatchDiscoverReport, BatchIngestReport, DiscoverResult, IngestResult
+from onefetch.models import BatchDiscoverReport, BatchIngestReport, DiscoverResult, IngestResult, image_src, normalize_images
 from onefetch.pipeline import IngestionPipeline
 from onefetch.plugins import PluginTask, create_default_registry
 from onefetch.plugins.presets import list_presets, load_preset
@@ -448,9 +448,14 @@ def _print_present(report, *, with_images: bool = False) -> None:
         if with_images and result.images:
             import urllib.parse
             print("- images:")
-            for i, img_url in enumerate(result.images, 1):
+            for i, item in enumerate(normalize_images(result.images), 1):
+                img_url = item["src"]
                 proxy_url = f"https://wsrv.nl/?url={urllib.parse.quote(img_url, safe='')}"
                 print(f"  - [IMG:{i}]: {img_url}")
+                if item.get("alt"):
+                    print(f"    alt: {item['alt']}")
+                if item.get("href"):
+                    print(f"    href: {item['href']}")
                 print(f"    proxy: {proxy_url}")
         if result.llm_outputs.summary:
             print(f"- llm_summary: {result.llm_outputs.summary}")
@@ -1158,8 +1163,10 @@ async def run_images(args: argparse.Namespace) -> int:
             if not feed.images:
                 print(f"[images] {adapter.id} | {feed.title or url} | 0 images")
                 continue
-            print(f"[images] {adapter.id} | {feed.title or url} | {len(feed.images)} images")
-            for i, img_url in enumerate(feed.images):
+            normalized = normalize_images(feed.images)
+            print(f"[images] {adapter.id} | {feed.title or url} | {len(normalized)} images")
+            for i, item in enumerate(normalized):
+                img_url = image_src(item)
                 if args.proxy:
                     import urllib.parse
                     proxied = f"https://wsrv.nl/?url={urllib.parse.quote(img_url, safe='')}"

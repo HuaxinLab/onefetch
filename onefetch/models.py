@@ -21,6 +21,41 @@ class FeedComment(BaseModel):
     text: str
 
 
+class ImageAsset(BaseModel):
+    src: str
+    alt: str = ""
+    href: str = ""
+
+
+def normalize_images(images: list[Any] | None) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for raw in images or []:
+        if isinstance(raw, ImageAsset):
+            src = str(raw.src or "").strip()
+            alt = str(raw.alt or "").strip()
+            href = str(raw.href or "").strip()
+        elif isinstance(raw, dict):
+            src = str(raw.get("src") or "").strip()
+            alt = str(raw.get("alt") or "").strip()
+            href = str(raw.get("href") or "").strip()
+        else:
+            src = str(raw or "").strip()
+            alt = ""
+            href = ""
+        if not src:
+            continue
+        rows.append({"src": src, "alt": alt, "href": href})
+    return rows
+
+
+def image_src(raw: Any) -> str:
+    if isinstance(raw, ImageAsset):
+        return str(raw.src or "").strip()
+    if isinstance(raw, dict):
+        return str(raw.get("src") or "").strip()
+    return str(raw or "").strip()
+
+
 class FeedEntry(BaseModel):
     id: str = Field(default_factory=_uuid)
     source_url: str
@@ -70,7 +105,7 @@ class IngestResult(BaseModel):
     comment_source: str = "none"
     body_preview: str = ""
     body_full: str = ""
-    images: list[Any] = Field(default_factory=list)
+    images: list[ImageAsset] = Field(default_factory=list)
     cache_path: str = ""
     llm_outputs: LLMOutputs = Field(default_factory=LLMOutputs)
     llm_outputs_state: Literal["missing", "ok", "fallback"] = "missing"

@@ -7,7 +7,7 @@ from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 
 from onefetch.config import Paths
-from onefetch.models import IngestResult, LLMOutputs
+from onefetch.models import IngestResult, LLMOutputs, normalize_images
 
 
 class TempCacheService:
@@ -34,7 +34,7 @@ class TempCacheService:
             "comment_source": result.comment_source,
             "body_preview": result.body_preview,
             "body_full": result.body_full,
-            "images": result.images,
+            "images": normalize_images(result.images),
             "llm_outputs": result.llm_outputs.model_dump(),
             "llm_outputs_state": result.llm_outputs_state,
             "error": result.error,
@@ -108,7 +108,7 @@ class TempCacheService:
             comment_source=str(payload.get("comment_source") or "none"),
             body_preview=str(payload.get("body_preview") or ""),
             body_full=str(payload.get("body_full") or ""),
-            images=list(payload.get("images") or []),
+            images=normalize_images(list(payload.get("images") or [])),
             llm_outputs=llm_outputs,
             llm_outputs_state=llm_state,
         )

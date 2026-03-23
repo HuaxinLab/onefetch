@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from onefetch.config import Paths
-from onefetch.models import IngestResult
+from onefetch.models import IngestResult, normalize_images
 
 _IMG_PLACEHOLDER_RE = re.compile(r"\[IMG:\d+\]\n?")
 _IMG_CAPTION_LINE_RE = re.compile(r"^\[IMG_CAPTION:(\d+)\]\s*(.*)$")
@@ -187,23 +187,13 @@ class StorageService:
     @staticmethod
     def _normalize_images(images: list) -> list[dict]:
         rows: list[dict] = []
-        for i, raw in enumerate(images or [], start=1):
-            if isinstance(raw, dict):
-                src = str(raw.get("src") or "").strip()
-                alt = str(raw.get("alt") or "").strip()
-                href = str(raw.get("href") or "").strip()
-            else:
-                src = str(raw or "").strip()
-                alt = ""
-                href = ""
-            if not src:
-                continue
+        for i, item in enumerate(normalize_images(images), start=1):
             rows.append(
                 {
                     "index": i,
-                    "src": src,
-                    "alt": alt,
-                    "href": href,
+                    "src": item["src"],
+                    "alt": item.get("alt", ""),
+                    "href": item.get("href", ""),
                 }
             )
         return rows
@@ -218,8 +208,16 @@ class StorageService:
 
     def _render_body_for_note(self, *, article_dir: Path, body: str, with_images: bool) -> str:
         lines = []
+        in_fence = False
         for raw in (body or "").splitlines():
-            line = raw.strip()
+            stripped = raw.strip()
+            # Preserve original indentation inside fenced code blocks.
+            if stripped.startswith("```"):
+                in_fence = not in_fence
+                lines.append(stripped or "```")
+                continue
+
+            line = raw if in_fence else stripped
             if not line:
                 lines.append("")
                 continue
@@ -242,7 +240,7 @@ class StorageService:
                 continue
 
             # Handle any inline caption token fallback.
-            line = _IMG_CAPTION_INLINE_RE.sub("", line).strip()
+            line = _IMG_CAPTION_INLINE_RE.sub("", line).strip() if not in_fence else line
             if line:
                 lines.append(line)
 

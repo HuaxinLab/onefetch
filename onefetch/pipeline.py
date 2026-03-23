@@ -4,7 +4,7 @@ import httpx
 
 import re
 
-from onefetch.models import BatchIngestReport, IngestResult
+from onefetch.models import BatchIngestReport, IngestResult, normalize_images
 from onefetch.router import Router
 
 _IMG_PLACEHOLDER_RE = re.compile(r"\[IMG:\d+\]\n?")
@@ -48,7 +48,7 @@ class IngestionPipeline:
                         comment_source=comment_source,
                         body_preview=self._preview(_IMG_PLACEHOLDER_RE.sub("", feed.body), limit=280),
                         body_full=(feed.body or "").strip(),
-                        images=feed.images,
+                        images=normalize_images(feed.images),
                         risk_controlled=risk_controlled,
                     )
                 )
