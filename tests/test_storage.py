@@ -46,10 +46,10 @@ def test_storage_store_and_duplicate_lookup(tmp_path: Path) -> None:
     assert "## 正文" in note_content
     assert "hello world" in note_content
 
-    # Duplicate detection
+    # Duplicate detection — catalog stores relative path
     dup = storage.find_duplicate("https://example.com/", "abc123")
     assert dup is not None
-    assert dup["article_dir"] == article_dir
+    assert article_dir.endswith(dup["article_dir"])
 
     # Second store should return existing dir (duplicate)
     article_dir2, is_dup2, _ = storage.store_result(result)
@@ -248,7 +248,7 @@ def test_relocate_articles_to_collection_keeps_single_order_prefix(tmp_path: Pat
     (a / "feed.json").write_text("{}", encoding="utf-8")
     (b / "feed.json").write_text("{}", encoding="utf-8")
 
-    moved1 = storage.relocate_articles_to_collection(
+    _, moved1 = storage.relocate_articles_to_collection(
         collection_key="seed-test",
         article_dirs_in_order=[str(a), str(b)],
     )
@@ -256,7 +256,7 @@ def test_relocate_articles_to_collection_keeps_single_order_prefix(tmp_path: Pat
     assert all(name.startswith(("001-", "002-")) for name in first_paths)
 
     # Re-run relocation with already-prefixed collection paths.
-    moved2 = storage.relocate_articles_to_collection(
+    _, moved2 = storage.relocate_articles_to_collection(
         collection_key="seed-test",
         article_dirs_in_order=[*moved1.values()],
     )

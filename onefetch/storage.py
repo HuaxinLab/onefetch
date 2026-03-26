@@ -17,6 +17,38 @@ _IMG_CAPTION_INLINE_RE = re.compile(r"\[IMG_CAPTION:(\d+)\]\s*")
 _IMG_MARKERS_INLINE_RE = re.compile(r"\[(?:IMG|IMG_CAPTION):\d+\]\s*")
 _ITEM_PREFIX_RE = re.compile(r"^(?:\d{3}-)+")
 
+# Strip leading sequence numbers like "01｜", "02 |", "03.", "04—", "14 -"
+_TITLE_SEQ_PREFIX_RE = re.compile(r"^\d+\s*[｜|丨.\-—:：]\s*")
+# Remove common suffixes like " - 极客时间 | 企业版"
+_TITLE_PLATFORM_SUFFIX_RE = re.compile(r"\s*[-\-]\s*极客时间.*$")
+# Keep only Chinese, letters, digits, spaces (will be collapsed later)
+_TITLE_KEEP_RE = re.compile(r"[^\u4e00-\u9fff\u3400-\u4dbf\w\s]")
+
+_SLUG_MAX_LEN = 50
+
+
+def slugify_title(title: str) -> str:
+    """Convert a title to a filesystem-friendly readable name.
+
+    Rules:
+    - Strip leading sequence numbers (01｜, 02-, etc.)
+    - Remove platform suffixes (- 极客时间 | 企业版)
+    - Remove special symbols, keep Chinese/English/digits
+    - Collapse whitespace to single hyphen
+    - Truncate to _SLUG_MAX_LEN characters (break at word boundary if possible)
+    """
+    if not title or not title.strip():
+        return ""
+    s = _TITLE_SEQ_PREFIX_RE.sub("", title.strip())
+    s = _TITLE_PLATFORM_SUFFIX_RE.sub("", s).strip()
+    s = _TITLE_KEEP_RE.sub(" ", s)
+    s = re.sub(r"\s+", "-", s).strip("-")
+    if len(s) > _SLUG_MAX_LEN:
+        # Try to break at a hyphen boundary
+        cut = s[:_SLUG_MAX_LEN].rfind("-")
+        s = s[: cut if cut > _SLUG_MAX_LEN // 2 else _SLUG_MAX_LEN]
+    return s or ""
+
 
 def _try_download_image(url: str) -> tuple[bytes | None, str]:
     try:
@@ -35,29 +67,63 @@ class StorageService:
         if not self._paths.catalog_file.exists():
             self._paths.catalog_file.touch()
 
+    def _resolve_article_dir(self, raw: str) -> Path:
+        """Resolve an article_dir value (relative or absolute) to an absolute Path."""
+        p = Path(raw)
+        if not p.is_absolute():
+            p = self._paths.data_dir / p
+        return p
+
+    def _relative_article_dir(self, article_dir: Path) -> str:
+        """Return article_dir as a path relative to data_dir."""
+        try:
+            return str(article_dir.relative_to(self._paths.data_dir))
+        except ValueError:
+            return str(article_dir)
+
     def find_duplicate(self, canonical_url: str, content_hash: str) -> dict | None:
+        """Find a matching catalog entry. Cleans up all stale entries (missing dirs) along the way."""
+        result: dict | None = None
+        alive: list[str] = []
+        dirty = False
         with self._paths.catalog_file.open("r", encoding="utf-8") as handle:
             for line in handle:
-                line = line.strip()
-                if not line:
+                raw = line.strip()
+                if not raw:
                     continue
-                record = json.loads(line)
-                if record.get("canonical_url") == canonical_url and record.get("content_hash") == content_hash:
-                    return record
-        return None
+                try:
+                    record = json.loads(raw)
+                except Exception:
+                    dirty = True
+                    continue
+                article_dir = str(record.get("article_dir", "") or "")
+                if article_dir and not self._resolve_article_dir(article_dir).is_dir():
+                    dirty = True
+                    continue
+                alive.append(raw)
+                if (
+                    result is None
+                    and record.get("canonical_url") == canonical_url
+                    and record.get("content_hash") == content_hash
+                ):
+                    result = record
+        if dirty:
+            with self._paths.catalog_file.open("w", encoding="utf-8") as handle:
+                for entry in alive:
+                    handle.write(entry + "\n")
+        return result
 
     def store_result(self, result: IngestResult, *, with_images: bool = False) -> tuple[str, bool, list[str]]:
-        """Store an IngestResult to data/. Returns (article_dir, is_duplicate, image_failures)."""
+        """Store an IngestResult to data/. Returns (article_dir absolute path, is_duplicate, image_failures)."""
         duplicate = self.find_duplicate(result.canonical_url, result.content_hash)
         if duplicate:
-            article_dir = str(duplicate.get("article_dir", "") or "")
-            article_path = Path(article_dir) if article_dir else None
+            article_dir_raw = str(duplicate.get("article_dir", "") or "")
+            article_path = self._resolve_article_dir(article_dir_raw) if article_dir_raw else None
             if article_path is None or not article_path.is_dir():
-                # Catalog can contain stale paths after historical collection swaps.
-                # If duplicate target no longer exists, treat it as a fresh store.
+                # find_duplicate already cleaned stale entries; treat as fresh store.
                 duplicate = None
             else:
-                if with_images and article_dir:
+                if with_images and article_dir_raw:
                     if result.images:
                         image_failures = self._download_images(article_path, result.images)
                     else:
@@ -65,8 +131,8 @@ class StorageService:
                     # Refresh note/feed on demand so existing duplicates can be "补图 + 清理标记".
                     self._save_feed(article_path, result)
                     self._save_note(article_path, result, with_images=True, image_failures=image_failures)
-                    return article_dir, True, image_failures
-                return article_dir, True, []
+                    return str(article_path), True, image_failures
+                return str(article_path), True, []
 
         article_dir = self._create_article_dir(result)
         image_failures: list[str] = []
@@ -74,13 +140,17 @@ class StorageService:
             image_failures = self._download_images(article_dir, result.images)
         self._save_feed(article_dir, result)
         self._save_note(article_dir, result, with_images=with_images, image_failures=image_failures)
-        self._append_catalog(result, str(article_dir))
+        self._append_catalog(result, self._relative_article_dir(article_dir))
         return str(article_dir), False, image_failures
 
     def _create_article_dir(self, result: IngestResult) -> Path:
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        slug = slugify_title(result.title or "")
+        date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
         short_hash = result.content_hash[:8] if result.content_hash else "unknown"
-        dirname = f"{stamp}-{short_hash}"
+        if slug:
+            dirname = f"{slug}-{date_str}-{short_hash}"
+        else:
+            dirname = f"{date_str}-{short_hash}"
         article_dir = self._paths.data_dir / dirname
         article_dir.mkdir(parents=True, exist_ok=True)
         return article_dir
@@ -308,13 +378,22 @@ class StorageService:
         self,
         *,
         collection_key: str,
+        collection_title: str = "",
         article_dirs_in_order: list[str],
-    ) -> dict[str, str]:
-        """Move stored article dirs under data/collections/<collection_key>/items in order.
+    ) -> tuple[Path, dict[str, str]]:
+        """Move stored article dirs under data/collections/<readable_name>/items in order.
 
-        Returns mapping {old_abs_path: new_abs_path} for successfully moved dirs.
+        Returns (collection_dir, moved) where moved is {old_abs_path: new_abs_path}.
+        ``collection_key`` is the hash-based key (e.g. ``seed-02bd...``).
+        ``collection_title`` is an optional human-readable title used to build the dir name.
         """
-        collection_dir = self._paths.data_dir / "collections" / collection_key
+        slug = slugify_title(collection_title) if collection_title else ""
+        short_hash = collection_key.split("-", 1)[-1][:8] if "-" in collection_key else collection_key[:8]
+        if slug:
+            collection_dirname = f"{slug}-{short_hash}"
+        else:
+            collection_dirname = collection_key
+        collection_dir = self._paths.data_dir / "collections" / collection_dirname
         items_dir = collection_dir / "items"
         next_items_dir = collection_dir / ".items.next"
         collection_dir.mkdir(parents=True, exist_ok=True)
@@ -345,13 +424,18 @@ class StorageService:
 
         if moved:
             self._rewrite_catalog_article_dirs(moved)
-        return moved
+        return collection_dir, moved
 
     @staticmethod
     def _strip_item_prefix(name: str) -> str:
         return _ITEM_PREFIX_RE.sub("", name or "").strip() or (name or "")
 
     def _rewrite_catalog_article_dirs(self, moved: dict[str, str]) -> None:
+        # Build lookup keyed by resolved absolute path -> new relative path
+        resolved_moved: dict[str, str] = {}
+        for old_abs, new_abs in moved.items():
+            resolved_moved[old_abs] = self._relative_article_dir(Path(new_abs))
+
         records: list[dict] = []
         changed = False
         with self._paths.catalog_file.open("r", encoding="utf-8") as handle:
@@ -364,8 +448,10 @@ class StorageService:
                 except Exception:
                     continue
                 old_dir = str(rec.get("article_dir") or "")
-                if old_dir in moved:
-                    rec["article_dir"] = moved[old_dir]
+                # Resolve catalog entry to absolute for matching
+                old_abs = str(self._resolve_article_dir(old_dir))
+                if old_abs in resolved_moved:
+                    rec["article_dir"] = resolved_moved[old_abs]
                     changed = True
                 records.append(rec)
         if not changed:

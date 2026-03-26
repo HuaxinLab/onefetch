@@ -962,12 +962,11 @@ def _collection_key_for_report(report: BatchDiscoverReport) -> str:
 def _write_collection_manifest(
     *,
     collection_key: str,
-    paths,
+    collection_dir: Path,
     discover_report: BatchDiscoverReport,
     ingest_report: BatchIngestReport,
     moved_paths: dict[str, str],
 ) -> Path:
-    collection_dir = paths.data_dir / "collections" / collection_key
     collection_dir.mkdir(parents=True, exist_ok=True)
 
     def _rel_feed_path(value: str) -> str:
@@ -1123,8 +1122,13 @@ async def run_discover(args: argparse.Namespace) -> int:
             storage = StorageService(paths)
             article_dirs = [str(r.feed_path or "").strip() for r in ingest_report.results if str(r.feed_path or "").strip()]
             collection_key = _collection_key_for_report(report)
-            moved_paths = storage.relocate_articles_to_collection(
+            # Use the first ingest result's title as the collection name
+            collection_title = ""
+            if ingest_report.results:
+                collection_title = ingest_report.results[0].title or ""
+            collection_dir, moved_paths = storage.relocate_articles_to_collection(
                 collection_key=collection_key,
+                collection_title=collection_title,
                 article_dirs_in_order=article_dirs,
             )
             for row in ingest_report.results:
@@ -1133,7 +1137,7 @@ async def run_discover(args: argparse.Namespace) -> int:
                     row.feed_path = moved_paths[fp]
             manifest_path = _write_collection_manifest(
                 collection_key=collection_key,
-                paths=paths,
+                collection_dir=collection_dir,
                 discover_report=report,
                 ingest_report=ingest_report,
                 moved_paths=moved_paths,
