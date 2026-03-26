@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 def _now() -> datetime:
@@ -106,6 +106,23 @@ class IngestResult(BaseModel):
     body_preview: str = ""
     body_full: str = ""
     images: list[ImageAsset] = Field(default_factory=list)
+
+    @field_validator("images", mode="before")
+    @classmethod
+    def _coerce_images(cls, v: Any) -> list[Any]:
+        """Accept bare strings/dicts and coerce them to ImageAsset-compatible input."""
+        if not isinstance(v, list):
+            return v
+        out: list[Any] = []
+        for item in v:
+            if isinstance(item, str):
+                out.append({"src": item})
+            elif isinstance(item, dict):
+                out.append(item)
+            else:
+                out.append(item)
+        return out
+
     cache_path: str = ""
     llm_outputs: LLMOutputs = Field(default_factory=LLMOutputs)
     llm_outputs_state: Literal["missing", "ok", "fallback"] = "missing"
