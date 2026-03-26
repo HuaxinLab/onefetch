@@ -205,6 +205,9 @@ class GenericHtmlAdapter(BaseAdapter):
     def _extract_main_text(tree: html.HtmlElement) -> str:
         cleaned = GenericHtmlAdapter._parse_html_tree(html.tostring(tree, encoding="unicode"))
         remove_xpaths = [
+            "//script",
+            "//style",
+            "//noscript",
             "//nav",
             "//header",
             "//footer",
@@ -399,6 +402,11 @@ class GenericHtmlAdapter(BaseAdapter):
             for spa_marker in ('id="app"', 'id="root"', 'id="__nuxt"'):
                 if spa_marker in normalized:
                     return True
+        # Content is mostly URLs (SPA nav links rendered for SEO, no real body text)
+        if content:
+            url_chars = sum(len(m) for m in re.findall(r"https?://\S+", content))
+            if url_chars > len(content) * 0.5:
+                return True
         return len(content or "") < 160
 
     @staticmethod
