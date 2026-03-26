@@ -271,6 +271,33 @@ bash scripts/run_cli.sh discover "SEED_URL" \
   ```
 - 评论需要 Cookie，未配置时引导用户配置
 
+#### 图片内容识别（豆包 OCR）
+
+很多小红书笔记的核心内容在图片中（图片里是文字），正文 `desc` 可能很短甚至为空。
+
+**判断时机：** 当 ingest 返回的 `full_body` 几乎为空（仅标题+标签）但有多张图片时，提示用户：
+「这篇笔记的内容主要在图片里，需要我解析图片中的文字吗？」
+
+**不要自动 OCR**，原因：
+- 图片可能很多（10+张），每张需要单独调用豆包 API
+- 使用用户个人账号 Cookie，需控制调用频率
+- 不是所有图片都包含文字（可能是纯配图）
+
+**操作流程：**
+
+1. 用户确认后，逐张调用豆包 API 提取文字：
+   ```bash
+   .venv/bin/python scripts/doubao_chat.py "提取图片中的所有文字，保持排版结构：<图片URL>"
+   ```
+2. **串行调用，每张间隔 2-3 秒**，避免触发风控
+3. 将每张图片的 OCR 结果按顺序整合，呈现给用户
+4. 如果用户要求，可以 `cache-backfill` 回填到缓存
+
+**用户主动要求时也可以使用：** 用户说「帮我看看图片里写了什么」「解析图片内容」等。
+
+**Cookie 配置：** 豆包 API 需要登录态 Cookie。
+首次使用时引导用户配置：`bash scripts/setup_cookie.sh doubao.com`
+
 ### 知乎
 
 - **问答页面**：无需 Cookie，自动通过 Playwright 渲染获取。默认返回问题 + 高赞 5 个回答（可能截断）。每个回答后标注了 `answer_id`，如需完整内容：
@@ -550,6 +577,22 @@ bash scripts/run_cli.sh discover "SEED_URL" \
 bash scripts/setup_cookie.sh xiaohongshu.com
 ONEFETCH_XHS_COMMENT_MODE='state+api' \
   bash scripts/run_cli.sh ingest --present "URL"
+```
+
+### 豆包聊天（图片 OCR / 多模态）
+
+```bash
+# 纯文本聊天
+.venv/bin/python scripts/doubao_chat.py "你好"
+
+# 图片内容识别（传 URL）
+.venv/bin/python scripts/doubao_chat.py "提取图片中的所有文字，保持排版结构：<图片URL>"
+
+# 指定 cookie 文件
+.venv/bin/python scripts/doubao_chat.py --cookie /path/to/cookie "message"
+
+# 配置 cookie
+bash scripts/setup_cookie.sh doubao.com
 ```
 
 ### 扩展管理
