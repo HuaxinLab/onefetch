@@ -16,10 +16,7 @@ if [[ -z "$domain" ]]; then
   exit 1
 fi
 
-COOKIE_FILE="${PROJECT_ROOT}/.secrets/${domain}_cookie.txt"
-
-mkdir -p "$(dirname "$COOKIE_FILE")"
-chmod 700 "$(dirname "$COOKIE_FILE")" || true
+VENV_PYTHON="${PROJECT_ROOT}/.venv/bin/python"
 
 # --- Read cookie ---
 if [[ ! -t 0 ]]; then
@@ -41,7 +38,7 @@ else
   cookie_content="$(printf '%s' "$cookie_content" | tr -d '\r' | sed 's/^ *//; s/ *$//')"
 fi
 
-# --- Validate & save ---
+# --- Validate ---
 if [[ -z "$cookie_content" ]]; then
   echo "[setup_cookie:${domain}] empty input, aborted"
   exit 1
@@ -52,7 +49,12 @@ if [[ "$cookie_content" != *"="* || "$cookie_content" != *";"* ]]; then
   exit 2
 fi
 
-printf '%s\n' "$cookie_content" > "$COOKIE_FILE"
-chmod 600 "$COOKIE_FILE" || true
+if [[ ! -x "$VENV_PYTHON" ]]; then
+  echo "[setup_cookie:${domain}] missing python: $VENV_PYTHON"
+  echo "Run: bash scripts/bootstrap.sh"
+  exit 3
+fi
 
-echo "[setup_cookie:${domain}] saved (${#cookie_content} chars) → $COOKIE_FILE"
+"$VENV_PYTHON" -m onefetch.secret_cli set-cookie --domain "$domain" --value "$cookie_content"
+
+echo "[setup_cookie:${domain}] saved to encrypted store (key=cookie.${domain})"

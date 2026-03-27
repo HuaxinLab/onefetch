@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import re
 from datetime import datetime, timezone
-from pathlib import Path
 from urllib.parse import urlparse
 
 from lxml import html
@@ -13,6 +11,7 @@ from onefetch.adapters.base import BaseAdapter, get_proxy_server, node_to_text
 from onefetch.http import create_async_client
 from onefetch.models import FeedEntry
 from onefetch.router import normalize_url
+from onefetch.secrets import load_cookie
 
 _BV_RE = re.compile(r"/(video|bangumi/play)/(BV[\w]+|ep\d+|ss\d+)")
 _OPUS_RE = re.compile(r"/opus/(\d+)")
@@ -194,13 +193,7 @@ class BilibiliAdapter(BaseAdapter):
 
     @staticmethod
     def _load_cookie() -> str:
-        project_root = Path(os.getenv("ONEFETCH_PROJECT_ROOT", ".")).resolve()
-        secrets_dir = project_root / ".secrets"
-        for name in ["bilibili.com_cookie.txt", "www.bilibili.com_cookie.txt"]:
-            path = secrets_dir / name
-            if path.is_file():
-                return path.read_text(encoding="utf-8").strip()
-        return ""
+        return load_cookie(domains=["bilibili.com", "www.bilibili.com"])
 
     @staticmethod
     def _request_headers(cookie: str = "") -> dict[str, str]:

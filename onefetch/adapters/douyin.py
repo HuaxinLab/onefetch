@@ -7,15 +7,14 @@ Douyin's AI video assistant API to get a summary and/or transcript of the video.
 from __future__ import annotations
 
 import json
-import os
 import re
 import time
-from pathlib import Path
 from urllib.parse import urlparse
 
 from onefetch.adapters.base import BaseAdapter
 from onefetch.http import create_async_client
 from onefetch.models import FeedEntry
+from onefetch.secrets import load_cookie
 
 _VIDEO_ID_RE = re.compile(r"/video/(\d+)")
 _SHORT_LINK_RE = re.compile(r"v\.douyin\.com")
@@ -172,24 +171,11 @@ class DouyinAdapter(BaseAdapter):
 
     @staticmethod
     def _load_cookie() -> str:
-        project_root = Path(os.getenv("ONEFETCH_PROJECT_ROOT", ".")).resolve()
-        cookie_file = project_root / ".secrets" / "douyin_cookie.txt"
-        if cookie_file.is_file():
-            raw = cookie_file.read_text(encoding="utf-8").strip()
-            if raw:
-                # Handle JSON format
-                try:
-                    data = json.loads(raw)
-                    if isinstance(data, dict):
-                        s = data.get("full_cookie_string", "")
-                        if not s and data.get("cookies"):
-                            s = "; ".join(f"{k}={v}" for k, v in data["cookies"].items())
-                        if s:
-                            return s
-                except (json.JSONDecodeError, TypeError):
-                    pass
-                return raw
-        return ""
+        return load_cookie(
+            domains=["douyin.com", "www.douyin.com"],
+            file_names=["douyin_cookie.txt"],
+            parse_json_cookie=True,
+        )
 
     @staticmethod
     def _extract_title(text: str) -> str:

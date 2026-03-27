@@ -105,6 +105,7 @@ ln -s /path/to/onefetch ~/.claude/skills/onefetch
    - 任意网站：`bash scripts/setup_cookie.sh example.com`（填域名即可）
 
 > 注意：Cookie 格式必须是 Header String（`key=value; key=value; ...`）。
+> 该脚本会保存到本地加密存储（`.onefetch/secrets.db`），不再写入 `.secrets` 明文文件。
 
 ## 页面元素提取（Plugin）
 

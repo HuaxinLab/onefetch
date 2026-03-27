@@ -23,47 +23,41 @@ Output: AI reply on stdout, timing on stderr
 
 import argparse
 import json
-import os
 import re
 import sys
 import time
 from pathlib import Path
 
 import httpx
+from onefetch.secrets import load_cookie as load_cookie_from_resolver
 
 BASE_URL = "https://so-landing.douyin.com"
 AID = "6383"
 DEVICE_ID = "7621538686223533610"
 
-PROJECT_ROOT = Path(os.environ.get("ONEFETCH_PROJECT_ROOT", Path(__file__).resolve().parent.parent))
-
 
 def load_cookie(cookie_path: str | None = None) -> str:
-    candidates = []
     if cookie_path:
-        candidates.append(Path(cookie_path))
-    else:
-        candidates.append(PROJECT_ROOT / ".secrets" / "douyin_cookie.txt")
-
-    for path in candidates:
-        if not path.exists():
-            continue
-        raw = path.read_text(encoding="utf-8").strip()
-        if not raw:
-            continue
-        # Try JSON format
-        try:
-            data = json.loads(raw)
-            if isinstance(data, dict):
-                s = data.get("full_cookie_string", "")
-                if not s and data.get("cookies"):
-                    s = "; ".join(f"{k}={v}" for k, v in data["cookies"].items())
-                if s:
-                    return s
-        except (json.JSONDecodeError, TypeError):
-            pass
-        if "=" in raw and not raw.startswith("{"):
+        raw = Path(cookie_path).read_text(encoding="utf-8").strip()
+        if raw:
+            try:
+                data = json.loads(raw)
+                if isinstance(data, dict):
+                    s = data.get("full_cookie_string", "")
+                    if not s and data.get("cookies"):
+                        s = "; ".join(f"{k}={v}" for k, v in data["cookies"].items())
+                    if s:
+                        return s
+            except (json.JSONDecodeError, TypeError):
+                pass
             return raw
+
+    resolved = load_cookie_from_resolver(
+        domains=["douyin.com", "www.douyin.com"],
+        parse_json_cookie=True,
+    )
+    if resolved:
+        return resolved
 
     print("Error: No douyin cookie found.", file=sys.stderr)
     print("Run: bash scripts/setup_cookie.sh douyin.com", file=sys.stderr)

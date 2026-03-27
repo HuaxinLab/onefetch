@@ -4,7 +4,6 @@ import asyncio
 import os
 import re
 from datetime import datetime
-from pathlib import Path
 from urllib.parse import urlparse
 
 from lxml import html
@@ -13,6 +12,7 @@ from onefetch.adapters.base import BaseAdapter, get_proxy_server, node_to_text
 from onefetch.http import create_async_client
 from onefetch.models import FeedEntry
 from onefetch.router import normalize_url
+from onefetch.secrets import load_cookie
 
 
 class GenericHtmlAdapter(BaseAdapter):
@@ -140,23 +140,10 @@ class GenericHtmlAdapter(BaseAdapter):
 
     @staticmethod
     def _load_cookie(url: str) -> str:
-        """Load cookie from .secrets/<domain>_cookie.txt if exists."""
         domain = (urlparse(url).hostname or "").lower()
         if not domain:
             return ""
-        project_root = Path(os.getenv("ONEFETCH_PROJECT_ROOT", ".")).resolve()
-        secrets_dir = project_root / ".secrets"
-        if not secrets_dir.is_dir():
-            return ""
-        cookie_file = secrets_dir / f"{domain}_cookie.txt"
-        if cookie_file.is_file():
-            return cookie_file.read_text(encoding="utf-8").strip()
-        # 尝试去掉 www. 前缀
-        if domain.startswith("www."):
-            cookie_file = secrets_dir / f"{domain[4:]}_cookie.txt"
-            if cookie_file.is_file():
-                return cookie_file.read_text(encoding="utf-8").strip()
-        return ""
+        return load_cookie(domains=[domain])
 
     @staticmethod
     def _looks_like_login_required(content: str, body_text: str, *, title: str | None = None) -> bool:

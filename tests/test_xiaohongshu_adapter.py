@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 import pytest
 
 from onefetch.adapters.xiaohongshu import XiaohongshuAdapter
+from onefetch.secret_store import cookie_key, set_secret
 
 
 def test_extract_note_data_from_initial_state() -> None:
@@ -80,10 +81,9 @@ class _FakeClientContext:
 
 async def test_fetch_comments_pagination_and_dedup(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     adapter = XiaohongshuAdapter()
-    secrets_dir = tmp_path / ".secrets"
-    secrets_dir.mkdir()
-    (secrets_dir / "xiaohongshu.com_cookie.txt").write_text("session=ok")
     monkeypatch.setenv("ONEFETCH_PROJECT_ROOT", str(tmp_path))
+    monkeypatch.setenv("ONEFETCH_MASTER_KEY", "test-master-key")
+    set_secret(cookie_key("xiaohongshu.com"), "session=ok")
     monkeypatch.setenv("ONEFETCH_XHS_COMMENT_MAX_PAGES", "5")
     monkeypatch.setenv("ONEFETCH_XHS_COMMENT_MAX_ITEMS", "50")
 

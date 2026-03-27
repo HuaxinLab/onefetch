@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 import asyncio
 from datetime import datetime, timedelta, timezone
 from html import unescape
-from pathlib import Path
 from urllib.parse import urlparse
 
 from lxml import html
@@ -15,6 +13,7 @@ from onefetch.adapters.base import BaseAdapter, get_proxy_server, node_to_text
 from onefetch.http import create_async_client
 from onefetch.models import FeedEntry
 from onefetch.router import normalize_url
+from onefetch.secrets import load_cookie
 
 _INITIAL_DATA_RE = re.compile(
     r'<script id="js-initialData" type="text/json">([\s\S]*?)</script>',
@@ -191,13 +190,7 @@ class ZhihuAdapter(BaseAdapter):
 
     @staticmethod
     def _load_cookie() -> str:
-        project_root = Path(os.getenv("ONEFETCH_PROJECT_ROOT", ".")).resolve()
-        secrets_dir = project_root / ".secrets"
-        for name in ["zhihu.com_cookie.txt", "zhuanlan.zhihu.com_cookie.txt"]:
-            path = secrets_dir / name
-            if path.is_file():
-                return path.read_text(encoding="utf-8").strip()
-        return ""
+        return load_cookie(domains=["zhihu.com", "zhuanlan.zhihu.com"])
 
     @staticmethod
     def _parse_cookie_pairs(cookie_header: str) -> list[tuple[str, str]]:

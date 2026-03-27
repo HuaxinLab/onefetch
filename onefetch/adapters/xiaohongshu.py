@@ -7,7 +7,6 @@ import random
 import re
 import time
 from datetime import datetime, timezone
-from pathlib import Path
 from urllib.parse import urlparse
 
 from lxml import html
@@ -16,6 +15,7 @@ from onefetch.adapters.base import BaseAdapter, get_proxy_server
 from onefetch.http import create_async_client
 from onefetch.models import FeedComment, FeedEntry
 from onefetch.router import normalize_url
+from onefetch.secrets import load_cookie
 
 
 class XiaohongshuAdapter(BaseAdapter):
@@ -203,13 +203,7 @@ class XiaohongshuAdapter(BaseAdapter):
 
     @staticmethod
     def _load_cookie() -> str:
-        project_root = Path(os.getenv("ONEFETCH_PROJECT_ROOT", ".")).resolve()
-        secrets_dir = project_root / ".secrets"
-        for name in ["xiaohongshu.com_cookie.txt", "www.xiaohongshu.com_cookie.txt"]:
-            path = secrets_dir / name
-            if path.is_file():
-                return path.read_text(encoding="utf-8").strip()
-        return ""
+        return load_cookie(domains=["xiaohongshu.com", "www.xiaohongshu.com"])
 
     @staticmethod
     def _comment_mode_flags() -> dict[str, object]:

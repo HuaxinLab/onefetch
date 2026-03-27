@@ -421,7 +421,32 @@ safe 策略规则：
    - B 站视频字幕：`bash scripts/setup_cookie.sh bilibili.com`
    - 其他网站：`bash scripts/setup_cookie.sh example.com`
 
-配置后保存在 `.secrets/<域名>_cookie.txt`，后续自动加载，无需额外参数。
+配置后写入本地加密库 `.onefetch/secrets.db`，后续自动加载。
+首次使用会自动创建主密钥文件 `.onefetch/master.key`（位于项目目录）。
+
+读取优先级：
+1. 本地加密库
+2. 环境变量（仅兜底）
+
+历史明文 cookie 一次性导入（指定文件）：
+```bash
+.venv/bin/python -m onefetch.secret_cli import-cookies --file /path/to/zhihu.com_cookie.txt
+.venv/bin/python -m onefetch.secret_cli import-cookies --file /path/to/random_cookie.txt --domain zhihu.com
+.venv/bin/python -m onefetch.secret_cli import-env --name ONEFETCH_COOKIE_ZHIHU_COM --domain zhihu.com
+```
+
+导入后规范化 key（去重并统一为标准域名，如 `zhihu.com`、`douyin.com`）：
+```bash
+.venv/bin/python -m onefetch.secret_cli normalize-cookies
+```
+
+查看/读取/删除加密库中的密钥：
+```bash
+.venv/bin/python -m onefetch.cli secret list --type cookie
+.venv/bin/python -m onefetch.cli secret get cookie.zhihu.com
+.venv/bin/python -m onefetch.cli secret get cookie.zhihu.com --no-masked
+.venv/bin/python -m onefetch.cli secret delete cookie.zhihu.com
+```
 
 注意：Cookie 格式必须是 Header String（`key=value; key=value; ...`），不能是 Netscape/curl 格式。
 
@@ -688,6 +713,9 @@ bash scripts/setup_cookie.sh zhihu.com
 bash scripts/setup_cookie.sh xiaohongshu.com
 bash scripts/setup_cookie.sh bilibili.com
 bash scripts/setup_cookie.sh <域名>
+.venv/bin/python -m onefetch.secret_cli import-cookies --file /path/to/zhihu.com_cookie.txt
+.venv/bin/python -m onefetch.secret_cli normalize-cookies
+.venv/bin/python -m onefetch.cli secret list --type cookie
 ```
 
 ### 浏览器组件安装

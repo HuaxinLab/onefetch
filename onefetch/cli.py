@@ -30,6 +30,7 @@ from onefetch.pipeline import IngestionPipeline
 from onefetch.plugins import PluginTask, create_default_registry
 from onefetch.plugins.presets import list_presets, load_preset
 from onefetch.router import Router
+from onefetch.secret_store import SecretStoreError, delete_secret, get_secret, list_secret_keys
 from onefetch.storage import StorageService
 
 URL_RE = re.compile(r"https?://[^\s<>()\[\]{}\"']+")
@@ -208,6 +209,27 @@ def build_parser() -> argparse.ArgumentParser:
         help="Enable temp cache in follow-up ingest",
     )
     discover.add_argument("--ingest-cache-max-items", type=int, default=200, help="Temp cache max entries in follow-up ingest")
+
+    secret = sub.add_parser("secret", help="Manage encrypted local secrets")
+    secret_sub = secret.add_subparsers(dest="secret_command", required=True)
+
+    secret_list = secret_sub.add_parser("list", help="List secret keys")
+    secret_list.add_argument("--type", default="", help="Optional secret type filter, e.g. cookie")
+    secret_list.add_argument("--json", action="store_true", help="Print JSON output")
+
+    secret_get = secret_sub.add_parser("get", help="Read one secret by key")
+    secret_get.add_argument("key", help="Secret key")
+    secret_get.add_argument(
+        "--masked",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Mask output value (default: true)",
+    )
+    secret_get.add_argument("--json", action="store_true", help="Print JSON output")
+
+    secret_delete = secret_sub.add_parser("delete", help="Delete one secret by key")
+    secret_delete.add_argument("key", help="Secret key")
+    secret_delete.add_argument("--json", action="store_true", help="Print JSON output")
     return parser
 
 
@@ -1185,6 +1207,66 @@ async def run_images(args: argparse.Namespace) -> int:
     return 0
 
 
+def _mask_secret_value(value: str) -> str:
+    raw = value or ""
+    if not raw:
+        return ""
+    if len(raw) <= 8:
+        return "*" * len(raw)
+    return f"{raw[:3]}...{raw[-2:]} (len={len(raw)})"
+
+
+def run_secret(args: argparse.Namespace) -> int:
+    try:
+        if args.secret_command == "list":
+            rows = list_secret_keys(secret_type=(args.type or "").strip() or None)
+            if args.json:
+                print(json.dumps({"keys": rows, "count": len(rows)}, ensure_ascii=False, indent=2))
+            else:
+                for key in rows:
+                    print(key)
+                print(f"[secret] total={len(rows)}")
+            return 0
+
+        if args.secret_command == "get":
+            value = get_secret(args.key)
+            if value is None:
+                if args.json:
+                    print(json.dumps({"key": args.key, "found": False}, ensure_ascii=False, indent=2))
+                else:
+                    print(f"[secret] not found: {args.key}")
+                return 1
+            output_value = _mask_secret_value(value) if args.masked else value
+            if args.json:
+                print(
+                    json.dumps(
+                        {"key": args.key, "found": True, "masked": bool(args.masked), "value": output_value},
+                        ensure_ascii=False,
+                        indent=2,
+                    )
+                )
+            else:
+                print(output_value)
+            return 0
+
+        if args.secret_command == "delete":
+            deleted = delete_secret(args.key)
+            if args.json:
+                print(json.dumps({"key": args.key, "deleted": deleted}, ensure_ascii=False, indent=2))
+            else:
+                if deleted:
+                    print(f"[secret] deleted: {args.key}")
+                else:
+                    print(f"[secret] not found: {args.key}")
+            return 0 if deleted else 1
+    except SecretStoreError as exc:
+        print(f"[secret] {exc}")
+        return 2
+
+    print(json.dumps({"error": f"Unsupported secret command: {args.secret_command}"}))
+    return 2
+
+
 async def _download_image(url: str, output_dir: Path, *, index: int) -> None:
     import urllib.parse
     from onefetch.http import create_async_client
@@ -1228,6 +1310,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_ext(args)
     if args.command == "discover":
         return asyncio.run(run_discover(args))
+    if args.command == "secret":
+        return run_secret(args)
 
     print(json.dumps({"error": f"Unsupported command: {args.command}"}))
     return 2
