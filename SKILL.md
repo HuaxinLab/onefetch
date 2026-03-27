@@ -408,6 +408,25 @@ safe 策略规则：
 
 需要配置 Cookie 时，引导用户按以下步骤操作：
 
+当缺少 Cookie 时，agent 先让用户选择导入方式，再给对应指导：
+1. 用户已复制 Cookie（推荐）→ 执行 `bash scripts/setup_cookie.sh <域名>`（自动读剪贴板）
+2. 用户提供 Cookie 文件路径 → 执行 `import-cookies --file ...`
+3. 用户提供环境变量名 → 执行 `import-env --name ... --domain ...`
+4. 用户不方便命令行 → 启动网页导入 `serve-web-import`，让用户在浏览器提交
+
+若用户选择“网页导入”，agent 按以下流程回复：
+1. 执行：
+   ```bash
+   .venv/bin/python -m onefetch.secret_cli serve-web-import --host 0.0.0.0 --port 8788 --share-host 192.168.2.10
+   ```
+2. 从命令输出中读取 `code` 和可访问 URL（优先 `lan_url`）。
+3. 发给用户导入文案（模板）：
+   - 「请在你的电脑浏览器打开：`http://<可访问地址>:8788`」
+   - 「配对码：`<code>`」
+   - 「域名填：`<target_domain>`，Cookie 填你复制的 Header String，然后提交」
+4. 成功后自动重试原请求。
+5. 说明：`0.0.0.0` 仅表示监听所有网卡，不可直接作为浏览器访问地址；需使用 `lan_url` 或宿主机 IP。若在 Docker 中，需先映射端口（如 `-p 8788:8788`）。
+
 1. 在浏览器中登录对应平台
 2. 获取 Cookie（任选一种）：
    - F12 DevTools：Network → 任意请求 → Headers → 复制 `Cookie:` 的值
@@ -433,6 +452,7 @@ safe 策略规则：
 .venv/bin/python -m onefetch.secret_cli import-cookies --file /path/to/zhihu.com_cookie.txt
 .venv/bin/python -m onefetch.secret_cli import-cookies --file /path/to/random_cookie.txt --domain zhihu.com
 .venv/bin/python -m onefetch.secret_cli import-env --name ONEFETCH_COOKIE_ZHIHU_COM --domain zhihu.com
+.venv/bin/python -m onefetch.secret_cli serve-web-import --host 0.0.0.0 --port 8788
 ```
 
 导入后规范化 key（去重并统一为标准域名，如 `zhihu.com`、`douyin.com`）：
@@ -714,6 +734,7 @@ bash scripts/setup_cookie.sh xiaohongshu.com
 bash scripts/setup_cookie.sh bilibili.com
 bash scripts/setup_cookie.sh <域名>
 .venv/bin/python -m onefetch.secret_cli import-cookies --file /path/to/zhihu.com_cookie.txt
+.venv/bin/python -m onefetch.secret_cli serve-web-import --host 0.0.0.0 --port 8788
 .venv/bin/python -m onefetch.secret_cli normalize-cookies
 .venv/bin/python -m onefetch.cli secret list --type cookie
 ```

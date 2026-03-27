@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import re
 import sys
+from urllib.parse import urlparse
 
 from onefetch.secret_store import (
     SecretStoreError,
@@ -13,6 +14,7 @@ from onefetch.secret_store import (
     move_secret_key,
     set_secret,
 )
+from onefetch.secret_web_import import serve_web_import
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -39,6 +41,17 @@ def main(argv: list[str] | None = None) -> int:
     import_env = sub.add_parser("import-env", help="Import cookie from an environment variable into encrypted store")
     import_env.add_argument("--name", required=True, help="Environment variable name that stores cookie value")
     import_env.add_argument("--domain", required=True, help="Target cookie domain, e.g. zhihu.com")
+    web_import = sub.add_parser("serve-web-import", help="Start a local web page for cookie import")
+    web_import.add_argument("--host", default="0.0.0.0", help="Bind host (default: 0.0.0.0)")
+    web_import.add_argument("--port", type=int, default=8788, help="Bind port (default: 8788)")
+    web_import.add_argument("--share-host", default="", help="Public/LAN host to show in share URL")
+    web_import.add_argument("--code", default="", help="Pairing code (auto-generate when empty)")
+    web_import.add_argument(
+        "--one-time",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Shutdown service after first successful import (default: true)",
+    )
     sub.add_parser("normalize-cookies", help="Normalize cookie keys to canonical domains")
 
     args = parser.parse_args(argv)
@@ -54,6 +67,16 @@ def main(argv: list[str] | None = None) -> int:
         if args.cmd == "import-env":
             import_cookie_from_env(args.name, args.domain)
             return 0
+        if args.cmd == "serve-web-import":
+            imported = serve_web_import(
+                args.host,
+                args.port,
+                code=args.code,
+                one_time=bool(args.one_time),
+                share_host=args.share_host,
+            )
+            print(f"[secret-cli] web import completed, imported={imported}")
+            return 0
         if args.cmd == "normalize-cookies":
             changed = normalize_cookie_keys()
             print(f"[secret-cli] normalized {changed} cookie keys")
@@ -61,6 +84,9 @@ def main(argv: list[str] | None = None) -> int:
     except SecretStoreError as exc:
         print(f"[secret-cli] {exc}", file=sys.stderr)
         return 2
+    except KeyboardInterrupt:
+        print("[secret-cli] cancelled by user")
+        return 130
 
     return 1
 
@@ -130,7 +156,9 @@ def normalize_cookie_keys() -> int:
 
 
 def canonical_cookie_domain(domain: str) -> str:
-    normalized = domain.strip().lower()
+    raw = (domain or "").strip().lower()
+    parsed = urlparse(raw if "://" in raw else f"//{raw}", scheme="http")
+    normalized = (parsed.hostname or raw).strip().lower()
     if normalized.startswith("www."):
         normalized = normalized[4:]
 

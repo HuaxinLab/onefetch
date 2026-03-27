@@ -43,6 +43,7 @@ def test_canonical_cookie_domain() -> None:
     assert canonical_cookie_domain("www.zhihu.com") == "zhihu.com"
     assert canonical_cookie_domain("zhihu") == "zhihu.com"
     assert canonical_cookie_domain("doubao") == "doubao.com"
+    assert canonical_cookie_domain("https://b.geekbang.org/member/course/intro/101123001") == "b.geekbang.org"
 
 
 def test_import_cookie_from_env(monkeypatch, tmp_path) -> None:
