@@ -19,7 +19,7 @@ import uuid
 from pathlib import Path
 
 import httpx
-from onefetch.secrets import load_cookie as load_cookie_from_resolver
+from onefetch.credentials import get_cookie_for_domains
 
 BASE_URL = "https://www.doubao.com"
 BOT_ID = "7338286299411103781"
@@ -42,8 +42,8 @@ def load_cookie(cookie_path: str | None = None) -> str:
                 pass
             return raw
 
-    resolved = load_cookie_from_resolver(
-        domains=["doubao.com", "www.doubao.com"],
+    resolved = get_cookie_for_domains(
+        ["doubao.com", "www.doubao.com"],
         parse_json_cookie=True,
     )
     if resolved:

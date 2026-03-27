@@ -12,9 +12,9 @@ import time
 from urllib.parse import urlparse
 
 from onefetch.adapters.base import BaseAdapter
+from onefetch.credentials import get_cookie_for_domains
 from onefetch.http import create_async_client
 from onefetch.models import FeedEntry
-from onefetch.secrets import load_cookie
 
 _VIDEO_ID_RE = re.compile(r"/video/(\d+)")
 _SHORT_LINK_RE = re.compile(r"v\.douyin\.com")
@@ -171,9 +171,8 @@ class DouyinAdapter(BaseAdapter):
 
     @staticmethod
     def _load_cookie() -> str:
-        return load_cookie(
-            domains=["douyin.com", "www.douyin.com"],
-            file_names=["douyin_cookie.txt"],
+        return get_cookie_for_domains(
+            ["douyin.com", "www.douyin.com"],
             parse_json_cookie=True,
         )
 

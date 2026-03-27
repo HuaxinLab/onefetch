@@ -29,7 +29,7 @@ import time
 from pathlib import Path
 
 import httpx
-from onefetch.secrets import load_cookie as load_cookie_from_resolver
+from onefetch.credentials import get_cookie_for_domains
 
 BASE_URL = "https://so-landing.douyin.com"
 AID = "6383"
@@ -52,8 +52,8 @@ def load_cookie(cookie_path: str | None = None) -> str:
                 pass
             return raw
 
-    resolved = load_cookie_from_resolver(
-        domains=["douyin.com", "www.douyin.com"],
+    resolved = get_cookie_for_domains(
+        ["douyin.com", "www.douyin.com"],
         parse_json_cookie=True,
     )
     if resolved:

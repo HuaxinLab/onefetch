@@ -12,10 +12,10 @@ from urllib.parse import urlparse
 from lxml import html
 
 from onefetch.adapters.base import BaseAdapter, get_proxy_server
+from onefetch.credentials import get_cookie_for_domains
 from onefetch.http import create_async_client
 from onefetch.models import FeedComment, FeedEntry
 from onefetch.router import normalize_url
-from onefetch.secrets import load_cookie
 
 
 class XiaohongshuAdapter(BaseAdapter):
@@ -203,7 +203,7 @@ class XiaohongshuAdapter(BaseAdapter):
 
     @staticmethod
     def _load_cookie() -> str:
-        return load_cookie(domains=["xiaohongshu.com", "www.xiaohongshu.com"])
+        return get_cookie_for_domains(["xiaohongshu.com", "www.xiaohongshu.com"])
 
     @staticmethod
     def _comment_mode_flags() -> dict[str, object]:

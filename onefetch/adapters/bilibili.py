@@ -8,10 +8,10 @@ from urllib.parse import urlparse
 from lxml import html
 
 from onefetch.adapters.base import BaseAdapter, get_proxy_server, node_to_text
+from onefetch.credentials import get_cookie_for_domains
 from onefetch.http import create_async_client
 from onefetch.models import FeedEntry
 from onefetch.router import normalize_url
-from onefetch.secrets import load_cookie
 
 _BV_RE = re.compile(r"/(video|bangumi/play)/(BV[\w]+|ep\d+|ss\d+)")
 _OPUS_RE = re.compile(r"/opus/(\d+)")
@@ -193,7 +193,7 @@ class BilibiliAdapter(BaseAdapter):
 
     @staticmethod
     def _load_cookie() -> str:
-        return load_cookie(domains=["bilibili.com", "www.bilibili.com"])
+        return get_cookie_for_domains(["bilibili.com", "www.bilibili.com"])
 
     @staticmethod
     def _request_headers(cookie: str = "") -> dict[str, str]:

@@ -9,10 +9,10 @@ from urllib.parse import urlparse
 from lxml import html
 
 from onefetch.adapters.base import BaseAdapter, get_proxy_server, node_to_text
+from onefetch.credentials import get_cookie_for_url
 from onefetch.http import create_async_client
 from onefetch.models import FeedEntry
 from onefetch.router import normalize_url
-from onefetch.secrets import load_cookie
 
 
 class GenericHtmlAdapter(BaseAdapter):
@@ -143,7 +143,7 @@ class GenericHtmlAdapter(BaseAdapter):
         domain = (urlparse(url).hostname or "").lower()
         if not domain:
             return ""
-        return load_cookie(domains=[domain])
+        return get_cookie_for_url(url)
 
     @staticmethod
     def _looks_like_login_required(content: str, body_text: str, *, title: str | None = None) -> bool:
