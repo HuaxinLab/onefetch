@@ -406,69 +406,47 @@ safe 策略规则：
 
 ## Cookie 配置
 
-需要配置 Cookie 时，引导用户按以下步骤操作：
+当缺少 Cookie 时，agent 让用户先选 4 种导入方式，再给对应指导：
+1. 剪贴板（推荐）：用户先复制 Cookie，执行 `bash scripts/setup_cookie.sh <域名>`（自动读剪贴板）
+2. 文件：执行 `import-cookies --file ...`
+3. 环境变量名：执行 `import-env --name ... --domain ...`
+4. 网页导入：启动 `serve-web-import`，让用户在浏览器提交
 
-当缺少 Cookie 时，agent 先让用户选择导入方式，再给对应指导：
-1. 用户已复制 Cookie（推荐）→ 执行 `bash scripts/setup_cookie.sh <域名>`（自动读剪贴板）
-2. 用户提供 Cookie 文件路径 → 执行 `import-cookies --file ...`
-3. 用户提供环境变量名 → 执行 `import-env --name ... --domain ...`
-4. 用户不方便命令行 → 启动网页导入 `serve-web-import`，让用户在浏览器提交
-
-若用户选择“网页导入”，agent 按以下流程回复：
-1. 执行：
-   ```bash
-   .venv/bin/python -m onefetch.secret_cli serve-web-import --host 0.0.0.0 --port 8788 --share-host 192.168.2.10
-   ```
-2. 从命令输出中读取 `code` 和可访问 URL（优先 `lan_url`）。
-3. 发给用户导入文案（模板）：
-   - 「请在你的电脑浏览器打开：`http://<可访问地址>:8788`」
-   - 「配对码：`<code>`」
-   - 「域名填：`<target_domain>`，Cookie 填你复制的 Header String，然后提交」
-4. 成功后自动重试原请求。
-5. 说明：`0.0.0.0` 仅表示监听所有网卡，不可直接作为浏览器访问地址；需使用 `lan_url` 或宿主机 IP。若在 Docker 中，需先映射端口（如 `-p 8788:8788`）。
-
-1. 在浏览器中登录对应平台
-2. 获取 Cookie（任选一种）：
-   - F12 DevTools：Network → 任意请求 → Headers → 复制 `Cookie:` 的值
-   - 浏览器插件：Cookie-Editor（导出选 Header String）
-3. 复制 Cookie 后运行脚本（自动读取剪贴板）：
-   ```bash
-   bash scripts/setup_cookie.sh <域名>
-   ```
-   - 知乎专栏：`bash scripts/setup_cookie.sh zhihu.com`
-   - 小红书评论：`bash scripts/setup_cookie.sh xiaohongshu.com`
-   - B 站视频字幕：`bash scripts/setup_cookie.sh bilibili.com`
-   - 其他网站：`bash scripts/setup_cookie.sh example.com`
-
-配置后写入本地加密库 `.onefetch/secrets.db`，后续自动加载。
+Cookie 配置后写入本地加密库 `.onefetch/secrets.db`，后续自动加载。
 首次使用会自动创建主密钥文件 `.onefetch/master.key`（位于项目目录）。
 
 读取优先级：
 1. 本地加密库
 2. 环境变量（仅兜底）
 
-历史明文 cookie 一次性导入（指定文件）：
+支持两种 Cookie 输入格式：
+1. Header String（`key=value; key=value; ...`）
+2. Netscape `cookies.txt`（通过 `import-cookies --file` 或网页导入提交）
+
+常用命令：
 ```bash
+# 剪贴板导入
+bash scripts/setup_cookie.sh zhihu.com
+
+# 文件导入（Header String / Netscape cookies.txt）
 .venv/bin/python -m onefetch.secret_cli import-cookies --file /path/to/zhihu.com_cookie.txt
-.venv/bin/python -m onefetch.secret_cli import-cookies --file /path/to/random_cookie.txt --domain zhihu.com
+.venv/bin/python -m onefetch.secret_cli import-cookies --file /path/to/cookies.txt --domain b.geekbang.org
+
+# 环境变量导入
 .venv/bin/python -m onefetch.secret_cli import-env --name ONEFETCH_COOKIE_ZHIHU_COM --domain zhihu.com
-.venv/bin/python -m onefetch.secret_cli serve-web-import --host 0.0.0.0 --port 8788
+
+# 网页导入（给不熟悉命令行的用户）
+.venv/bin/python -m onefetch.secret_cli serve-web-import --host 0.0.0.0 --port 8788 --share-host 192.168.2.10
 ```
 
-导入后规范化 key（去重并统一为标准域名，如 `zhihu.com`、`douyin.com`）：
-```bash
-.venv/bin/python -m onefetch.secret_cli normalize-cookies
-```
-
-查看/读取/删除加密库中的密钥：
-```bash
-.venv/bin/python -m onefetch.cli secret list --type cookie
-.venv/bin/python -m onefetch.cli secret get cookie.zhihu.com
-.venv/bin/python -m onefetch.cli secret get cookie.zhihu.com --no-masked
-.venv/bin/python -m onefetch.cli secret delete cookie.zhihu.com
-```
-
-注意：Cookie 格式必须是 Header String（`key=value; key=value; ...`），不能是 Netscape/curl 格式。
+网页导入时，agent 文案模板：
+1. 从输出读取 `code` 和可访问 URL（优先 `share_url`，其次 `lan_url`）。
+2. 发给用户：
+   - 「请在浏览器打开：`http://<可访问地址>:8788`」
+   - 「配对码：`<code>`」
+   - 「域名填：`<target_domain>`，Cookie 粘贴后提交」
+3. 成功后自动重试原请求。
+4. 说明：`0.0.0.0` 仅是监听地址，不可直接访问；在 Docker 中需映射端口（如 `-p 8788:8788`）。
 
 ---
 
@@ -729,12 +707,23 @@ bash scripts/run_cli.sh plugin doctor extract_html_js_jsonp \
 ### Cookie 配置
 
 ```bash
+# 剪贴板导入
 bash scripts/setup_cookie.sh zhihu.com
 bash scripts/setup_cookie.sh xiaohongshu.com
 bash scripts/setup_cookie.sh bilibili.com
 bash scripts/setup_cookie.sh <域名>
+
+# 文件导入（Header String / Netscape cookies.txt）
 .venv/bin/python -m onefetch.secret_cli import-cookies --file /path/to/zhihu.com_cookie.txt
-.venv/bin/python -m onefetch.secret_cli serve-web-import --host 0.0.0.0 --port 8788
+.venv/bin/python -m onefetch.secret_cli import-cookies --file /path/to/cookies.txt --domain b.geekbang.org
+
+# 环境变量名导入
+.venv/bin/python -m onefetch.secret_cli import-env --name ONEFETCH_COOKIE_ZHIHU_COM --domain zhihu.com
+
+# 网页导入
+.venv/bin/python -m onefetch.secret_cli serve-web-import --host 0.0.0.0 --port 8788 --share-host 192.168.2.10
+
+# 清理与查看
 .venv/bin/python -m onefetch.secret_cli normalize-cookies
 .venv/bin/python -m onefetch.cli secret list --type cookie
 ```

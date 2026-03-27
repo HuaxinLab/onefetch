@@ -27,6 +27,20 @@ def test_import_cookies_from_explicit_dir(monkeypatch, tmp_path) -> None:
     assert get_secret("cookie.bilibili.com") == "SESSDATA=1;"
 
 
+def test_import_cookies_supports_netscape(monkeypatch, tmp_path) -> None:
+    path = tmp_path / "cookies.txt"
+    path.write_text(
+        ".b.geekbang.org\tTRUE\t/\tFALSE\t2147483647\tSESSDATA\tabc\n"
+        ".b.geekbang.org\tTRUE\t/\tFALSE\t2147483647\tbid\txyz\n"
+    )
+    monkeypatch.setenv("ONEFETCH_PROJECT_ROOT", str(tmp_path))
+    count = import_cookie_files([str(path)], domain_override="b.geekbang.org")
+    assert count == 1
+    value = get_secret("cookie.b.geekbang.org") or ""
+    assert "SESSDATA=abc" in value
+    assert "bid=xyz" in value
+
+
 def test_normalize_cookie_keys_merges_aliases(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("ONEFETCH_PROJECT_ROOT", str(tmp_path))
     monkeypatch.setenv("ONEFETCH_MASTER_KEY", "test-master-key")

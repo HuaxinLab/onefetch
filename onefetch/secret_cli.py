@@ -7,6 +7,7 @@ import re
 import sys
 from urllib.parse import urlparse
 
+from onefetch.cookie_formats import CookieFormatError, parse_cookie_input
 from onefetch.secret_store import (
     SecretStoreError,
     cookie_key,
@@ -81,7 +82,7 @@ def main(argv: list[str] | None = None) -> int:
             changed = normalize_cookie_keys()
             print(f"[secret-cli] normalized {changed} cookie keys")
             return 0
-    except SecretStoreError as exc:
+    except (SecretStoreError, CookieFormatError) as exc:
         print(f"[secret-cli] {exc}", file=sys.stderr)
         return 2
     except KeyboardInterrupt:
@@ -103,11 +104,13 @@ def import_cookie_files(files: list[str], *, domain_override: str = "") -> int:
         domain = (domain_override or _domain_from_filename(path.name)).strip().lower()
         if not domain:
             raise SecretStoreError(f"cannot infer domain from filename: {path.name}; pass --domain")
-        value = path.read_text(encoding="utf-8").strip()
-        if not value:
+        raw = path.read_text(encoding="utf-8")
+        if not raw.strip():
             continue
-        canonical = canonical_cookie_domain(domain)
-        set_secret(cookie_key(canonical), value, secret_type="cookie")
+        parsed = parse_cookie_input(raw, domain_hint=domain)
+        target_domain = parsed.inferred_domain or domain
+        canonical = canonical_cookie_domain(target_domain)
+        set_secret(cookie_key(canonical), parsed.header, secret_type="cookie")
         imported += 1
         print(f"[secret-cli] imported {path} -> key=cookie.{canonical}")
     return imported
@@ -135,8 +138,9 @@ def import_cookie_from_env(env_name: str, domain: str) -> None:
         raise SecretStoreError("env name is required")
     if not raw:
         raise SecretStoreError(f"env var not found or empty: {env_name}")
-    canonical = canonical_cookie_domain(domain)
-    set_secret(cookie_key(canonical), raw, secret_type="cookie")
+    parsed = parse_cookie_input(raw, domain_hint=domain)
+    canonical = canonical_cookie_domain(parsed.inferred_domain or domain)
+    set_secret(cookie_key(canonical), parsed.header, secret_type="cookie")
     print(f"[secret-cli] imported env:{env_name} -> key=cookie.{canonical}")
 
 

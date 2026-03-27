@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
+from onefetch.cookie_formats import CookieFormatError, parse_cookie_input
 from onefetch.secret_store import SecretStoreError, cookie_key, set_secret
 
 
@@ -37,11 +38,6 @@ def canonical_cookie_domain(domain: str) -> str:
     if "." not in normalized:
         return normalized + ".com"
     return normalized
-
-
-def validate_cookie_text(value: str) -> bool:
-    text = (value or "").strip()
-    return bool(text and "=" in text and ";" in text)
 
 
 def generate_code() -> str:
@@ -178,13 +174,15 @@ def serve_web_import(
             if not domain:
                 self._send_html(_page(state, message="域名不能为空", error=True), status=400)
                 return
-            if not validate_cookie_text(cookie):
-                self._send_html(_page(state, message="Cookie 格式不正确，应为 k=v; k2=v2", error=True), status=400)
+            try:
+                parsed_cookie = parse_cookie_input(cookie, domain_hint=domain)
+            except CookieFormatError as exc:
+                self._send_html(_page(state, message=f"Cookie 格式不正确: {exc}", error=True), status=400)
                 return
 
-            canonical = canonical_cookie_domain(domain)
+            canonical = canonical_cookie_domain(parsed_cookie.inferred_domain or domain)
             try:
-                set_secret(cookie_key(canonical), cookie, secret_type="cookie")
+                set_secret(cookie_key(canonical), parsed_cookie.header, secret_type="cookie")
             except SecretStoreError as exc:
                 self._send_html(_page(state, message=f"写入失败: {exc}", error=True), status=500)
                 return

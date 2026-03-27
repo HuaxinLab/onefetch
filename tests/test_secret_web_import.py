@@ -1,10 +1,4 @@
-from onefetch.secret_web_import import canonical_cookie_domain, generate_code, validate_cookie_text
-
-
-def test_validate_cookie_text() -> None:
-    assert validate_cookie_text("a=1; b=2")
-    assert not validate_cookie_text("")
-    assert not validate_cookie_text("a=1")
+from onefetch.secret_web_import import canonical_cookie_domain, generate_code
 
 
 def test_canonical_cookie_domain() -> None:
