@@ -1,6 +1,7 @@
 import pytest
 
 from onefetch.adapters.generic_html import GenericHtmlAdapter
+from onefetch.adapters.x import XAdapter
 from lxml import html
 
 
@@ -115,7 +116,7 @@ async def test_cookie_required_path_retries_browser_before_raising(monkeypatch) 
     async def _fake_render(_url: str, *, cookie: str = ""):
         return browser_html, "https://example.com/post", {"status": "ok", "load_mode": "networkidle"}
 
-    monkeypatch.setattr("onefetch.adapters.generic_html.create_async_client", lambda **_: _Client())
+    monkeypatch.setattr("onefetch.adapters.x.create_async_client", lambda **_: _Client())
     monkeypatch.setattr(GenericHtmlAdapter, "_render_with_browser", staticmethod(_fake_render))
 
     feed = await GenericHtmlAdapter().crawl("https://example.com/post")
@@ -126,12 +127,12 @@ async def test_cookie_required_path_retries_browser_before_raising(monkeypatch) 
 
 
 def test_x_shell_detection_markers() -> None:
-    assert GenericHtmlAdapter._looks_like_x_shell(
+    assert XAdapter._looks_like_x_shell(
         content="Something went wrong, but don’t fret — let’s give it another shot.",
         body_text="",
         title="X",
     )
-    assert GenericHtmlAdapter._looks_like_x_shell(
+    assert XAdapter._looks_like_x_shell(
         content="Don’t miss what’s happening\nPeople on X are the first to know.\nLog in Sign up",
         body_text="",
         title="X",
@@ -145,7 +146,7 @@ Don’t miss what’s happening
 
 People on X are the first to know.
 """
-    assert GenericHtmlAdapter._extract_reader_markdown(text) == ""
+    assert XAdapter._extract_reader_markdown(text) == ""
 
 
 async def test_fetch_x_fallback_from_oembed_tco_and_reader(monkeypatch) -> None:
@@ -192,6 +193,6 @@ Recovered longform body from reader fallback.
                 return _Resp(text=reader_text)
             return _Resp(text="")
 
-    monkeypatch.setattr("onefetch.adapters.generic_html.create_async_client", lambda **_: _Client())
-    got = await GenericHtmlAdapter()._fetch_x_fallback("https://x.com/user/status/1")
+    monkeypatch.setattr("onefetch.adapters.x.create_async_client", lambda **_: _Client())
+    got = await XAdapter()._fetch_x_fallback("https://x.com/user/status/1")
     assert "Recovered longform body" in got

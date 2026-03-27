@@ -4,7 +4,7 @@ import asyncio
 import os
 import re
 from datetime import datetime
-from urllib.parse import quote, urlparse
+from urllib.parse import urlparse
 
 from lxml import html
 
@@ -80,20 +80,6 @@ class GenericHtmlAdapter(BaseAdapter):
 
         if not content:
             content = body_text[:5000]
-
-        # X/Twitter sometimes returns an error shell or login wall for anonymous sessions.
-        # Try resilient fallbacks before classifying as cookie-required.
-        if self._is_x_status_url(url) and (
-            self._looks_like_x_shell(content, body_text, title=title)
-            or self._looks_like_login_required(content, body_text, title=title)
-            or len((content or "").strip()) < 500
-        ):
-            x_fallback = await self._fetch_x_fallback(url)
-            if x_fallback:
-                content = x_fallback
-                body_text = x_fallback
-                if not title or title in {"X", "Untitled page"}:
-                    title = "X post (fallback)"
 
         # 内容为空或疑似登录态页面：在 auto 模式下再做一次浏览器兜底，避免误判。
         if (
@@ -179,85 +165,6 @@ class GenericHtmlAdapter(BaseAdapter):
                 if marker in raw:
                     return True
         return False
-
-    @staticmethod
-    def _is_x_status_url(url: str) -> bool:
-        parsed = urlparse(url)
-        host = (parsed.hostname or "").lower()
-        if host not in {"x.com", "www.x.com", "twitter.com", "www.twitter.com"}:
-            return False
-        path = (parsed.path or "").lower()
-        return "/status/" in path
-
-    @staticmethod
-    def _looks_like_x_shell(content: str, body_text: str, *, title: str | None = None) -> bool:
-        merged = f"{title or ''}\n{content or ''}\n{body_text or ''}".lower()
-        markers = [
-            "something went wrong, but don’t fret",
-            "something went wrong, but don't fret",
-            "privacy related extensions may cause issues on x.com",
-            "don’t miss what’s happening",
-            "people on x are the first to know",
-            "log in sign up",
-        ]
-        if any(m in merged for m in markers):
-            return True
-        # If tweet markers are absent and content is nearly empty, treat as shell page.
-        if len((content or "").strip()) < 120 and 'data-testid="tweet"' not in merged and "tweettext" not in merged:
-            return True
-        return False
-
-    @staticmethod
-    def _extract_reader_markdown(text: str) -> str:
-        if not text:
-            return ""
-        marker = "Markdown Content:"
-        idx = text.find(marker)
-        body = text[idx + len(marker):] if idx >= 0 else text
-        cleaned = body.strip()
-        if not cleaned:
-            return ""
-        if "Don’t miss what’s happening" in cleaned or "People on X are the first to know." in cleaned:
-            return ""
-        return cleaned
-
-    async def _fetch_x_fallback(self, url: str) -> str:
-        oembed_url = (
-            "https://publish.twitter.com/oembed"
-            f"?omit_script=1&dnt=true&url={quote(url, safe='')}"
-        )
-        try:
-            async with create_async_client(timeout=20, follow_redirects=True) as client:
-                oembed_resp = await client.get(oembed_url)
-                oembed_resp.raise_for_status()
-                payload = oembed_resp.json()
-                html_snippet = str(payload.get("html") or "")
-                if not html_snippet:
-                    return ""
-
-                block = self._parse_html_tree(f"<div>{html_snippet}</div>")
-                text = " ".join((block.text_content() or "").split()).strip()
-                # oEmbed has direct content for regular tweets.
-                if text and "https://t.co/" not in text and len(text) >= 40:
-                    return text
-
-                # For longform posts, oEmbed often only exposes a t.co short link.
-                links = block.xpath(".//a/@href")
-                tco = next((link for link in links if isinstance(link, str) and link.startswith("https://t.co/")), "")
-                if not tco:
-                    return ""
-
-                resolved = await client.get(tco)
-                target_url = str(resolved.url)
-                if "/i/article/" not in target_url:
-                    return ""
-
-                reader_url = "https://r.jina.ai/http://" + target_url.replace("https://", "").replace("http://", "")
-                reader_resp = await client.get(reader_url)
-                reader_resp.raise_for_status()
-                return self._extract_reader_markdown(reader_resp.text)[:20000]
-        except Exception:
-            return ""
 
     @staticmethod
     def _render_mode() -> str:

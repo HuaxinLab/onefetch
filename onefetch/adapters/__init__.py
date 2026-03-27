@@ -1,5 +1,6 @@
 from onefetch.adapters.bilibili import BilibiliAdapter
 from onefetch.adapters.generic_html import GenericHtmlAdapter
+from onefetch.adapters.x import XAdapter
 from onefetch.adapters.zhihu import ZhihuAdapter
 from onefetch.adapters.wechat import WechatAdapter
 from onefetch.adapters.xiaohongshu import XiaohongshuAdapter
@@ -22,6 +23,7 @@ __all__ = [
     "BaseAdapter",
     "BilibiliAdapter",
     "GenericHtmlAdapter",
+    "XAdapter",
     "ZhihuAdapter",
     "WechatAdapter",
     "XiaohongshuAdapter",
