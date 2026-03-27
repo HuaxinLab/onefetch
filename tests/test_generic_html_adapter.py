@@ -1,3 +1,5 @@
+import pytest
+
 from onefetch.adapters.generic_html import GenericHtmlAdapter
 from lxml import html
 
@@ -70,3 +72,54 @@ def test_extract_main_text_keeps_table_and_image_placeholder() -> None:
     assert "| A | 1 |" in text
     assert "[IMG:1]" in text
     assert images == ["https://img.example.com/a.png"]
+
+
+async def test_cookie_required_path_retries_browser_before_raising(monkeypatch) -> None:
+    http_html = """
+    <html><body>
+      <main>
+        <p>{text}</p>
+      </main>
+      <div>log in to continue</div>
+    </body></html>
+    """.format(text=("A" * 220))
+    browser_html = """
+    <html><body>
+      <article>
+        <h1>Public Post</h1>
+        <p>This is readable content from browser rendering.</p>
+      </article>
+    </body></html>
+    """
+
+    class _Resp:
+        def __init__(self, text: str) -> None:
+            self.text = text
+            self.url = "https://example.com/post"
+            self.status_code = 200
+            self.headers = {"content-type": "text/html"}
+
+        def raise_for_status(self) -> None:
+            return None
+
+    class _Client:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, _url: str):
+            return _Resp(http_html)
+
+    async def _fake_render(_url: str, *, cookie: str = ""):
+        return browser_html, "https://example.com/post", {"status": "ok", "load_mode": "networkidle"}
+
+    monkeypatch.setattr("onefetch.adapters.generic_html.create_async_client", lambda **_: _Client())
+    monkeypatch.setattr(GenericHtmlAdapter, "_render_with_browser", staticmethod(_fake_render))
+
+    feed = await GenericHtmlAdapter().crawl("https://example.com/post")
+
+    assert "Public Post" in feed.body
+    assert "readable content from browser rendering" in feed.body
+    assert feed.metadata["render_mode"] == "browser"

@@ -52,18 +52,7 @@ class GenericHtmlAdapter(BaseAdapter):
         published_at = None
         content = ""
         if body_text:
-            tree = self._parse_html_tree(body_text)
-            title = self._first_text(tree, ["//meta[@property='og:title']/@content", "//title/text()"])
-            author = self._first_text(tree, ["//meta[@name='author']/@content", "//meta[@property='article:author']/@content"])
-            published_raw = self._first_text(
-                tree,
-                [
-                    "//meta[@property='article:published_time']/@content",
-                    "//time/@datetime",
-                ],
-            )
-            published_at = self._parse_datetime(published_raw)
-            content, images = self._extract_main_text(tree)
+            title, author, published_at, content, images = self._extract_from_html(body_text)
 
         should_try_browser = mode == "browser" or (mode == "auto" and self._needs_browser_fallback(content, body_text))
         browser_status: dict[str, str] = {"status": "skipped", "reason": "not_needed"}
@@ -76,18 +65,7 @@ class GenericHtmlAdapter(BaseAdapter):
                 body_text = rendered_html
                 final_url = rendered_url or final_url
                 status_code = 200 if status_code <= 0 else status_code
-                tree = self._parse_html_tree(body_text)
-                title = self._first_text(tree, ["//meta[@property='og:title']/@content", "//title/text()"])
-                author = self._first_text(tree, ["//meta[@name='author']/@content", "//meta[@property='article:author']/@content"])
-                published_raw = self._first_text(
-                    tree,
-                    [
-                        "//meta[@property='article:published_time']/@content",
-                        "//time/@datetime",
-                    ],
-                )
-                published_at = self._parse_datetime(published_raw)
-                content, images = self._extract_main_text(tree)
+                title, author, published_at, content, images = self._extract_from_html(body_text)
 
         if not body_text and fetch_error:
             raise RuntimeError(f"generic_html fetch failed: {fetch_error}")
@@ -102,6 +80,23 @@ class GenericHtmlAdapter(BaseAdapter):
 
         if not content:
             content = body_text[:5000]
+
+        # 内容为空或疑似登录态页面：在 auto 模式下再做一次浏览器兜底，避免误判。
+        if (
+            mode == "auto"
+            and not cookie
+            and not used_browser
+            and self._looks_like_login_required(content, body_text, title=title)
+        ):
+            rendered_html, rendered_url, render_state = await self._render_with_browser(final_url if body_text else url, cookie=cookie)
+            browser_status = render_state
+            if rendered_html:
+                used_browser = True
+                body_text = rendered_html
+                final_url = rendered_url or final_url
+                title, author, published_at, content, images = self._extract_from_html(body_text)
+                if not content:
+                    content = body_text[:5000]
 
         # 内容为空或需要登录
         if not cookie and self._looks_like_login_required(content, body_text, title=title):
@@ -187,6 +182,25 @@ class GenericHtmlAdapter(BaseAdapter):
                 if stripped:
                     return stripped
         return None
+
+    @classmethod
+    def _extract_from_html(
+        cls,
+        body_text: str,
+    ) -> tuple[str | None, str | None, datetime | None, str, list[str]]:
+        tree = cls._parse_html_tree(body_text)
+        title = cls._first_text(tree, ["//meta[@property='og:title']/@content", "//title/text()"])
+        author = cls._first_text(tree, ["//meta[@name='author']/@content", "//meta[@property='article:author']/@content"])
+        published_raw = cls._first_text(
+            tree,
+            [
+                "//meta[@property='article:published_time']/@content",
+                "//time/@datetime",
+            ],
+        )
+        published_at = cls._parse_datetime(published_raw)
+        content, images = cls._extract_main_text(tree)
+        return title, author, published_at, content, images
 
     @staticmethod
     def _extract_main_text(tree: html.HtmlElement) -> str:
