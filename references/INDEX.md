@@ -11,6 +11,14 @@
 - [需求说明](./REQUIREMENTS.md)
 - [工程指南（实现 + 路线）](./ENGINEERING.md)
 
+### Skill 参考文档
+
+- [平台特殊处理详情](./SKILL_PLATFORMS.md) — 小红书、抖音、知乎、B 站、扩展站点
+- [Cookie 配置详情](./SKILL_COOKIES.md) — 4 种导入方式完整命令
+- [插件体系](./SKILL_PLUGINS.md) — 页面元素提取（CSS / JSONP / 链路）
+- [命令速查](./SKILL_COMMANDS.md) — 所有 CLI 命令完整列表
+- [输出字段与格式](./SKILL_FIELDS.md) — 输出字段、discover 参数、风险控制、提示模板
+
 ## English
 
 - [README (user entry, start here)](./README.en.md)
